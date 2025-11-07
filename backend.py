@@ -7,61 +7,19 @@ import sqlite3
 import hashlib
 from datetime import datetime, timedelta
 import time
+from contextlib import asynccontextmanager
 
-# Настройки
-SECRET_KEY = "мой-секретный-ключ-2024-очень-безопасный-ключ"
+# Settings
+SECRET_KEY = "my-secret-key-2024-very-secure-key"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-app = FastAPI(
-    title="Система авторизации",
-    version="1.0.0",
-    description="Система регистрации и авторизации пользователей"
-)
-
-# CORS настройки
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-security = HTTPBearer()
-
-# Модели данных
-class ПользовательСоздание(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
-
-class ПользовательВход(BaseModel):
-    email: EmailStr
-    password: str
-
-class ПользовательОтвет(BaseModel):
-    id: int
-    username: str
-    email: str
-    created_at: str
-
-class ТокенОтвет(BaseModel):
-    access_token: str
-    token_type: str
-    user: ПользовательОтвет
-
-class ОтветМодель(BaseModel):
-    статус: str
-    сообщение: str
-    данные: Optional[dict] = None
-
-# Инициализация базы данных
-def инициализировать_бд():
-    conn = sqlite3.connect('пользователи.db', check_same_thread=False)
+# Database functions (must be declared before lifespan)
+def init_db():
+    conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
     
     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS пользователи (
+        CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             email TEXT UNIQUE NOT NULL,
@@ -73,55 +31,106 @@ def инициализировать_бд():
     conn.commit()
     conn.close()
 
-# Хеширование пароля
-def хешировать_пароль(пароль: str) -> str:
-    return hashlib.sha256(пароль.encode()).hexdigest()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_db()
+    yield
+    # Shutdown (can add connection closing logic)
 
-# Проверка пароля
-def проверить_пароль(пароль: str, хеш: str) -> bool:
-    return хешировать_пароль(пароль) == хеш
+app = FastAPI(
+    title="Authorization System",
+    version="1.0.0",
+    description="User registration and authorization system",
+    lifespan=lifespan
+)
 
-# Простая реализация JWT (для демонстрации)
-def создать_токен(данные: dict):
-    # В реальном приложении используйте библиотеку PyJWT
-    # Здесь упрощенная реализация для демонстрации
+# CORS settings
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+security = HTTPBearer()
+
+# Data models
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    created_at: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class ResponseModel(BaseModel):
+    status: str
+    message: str
+    data: Optional[dict] = None
+
+# Password hashing
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# Password verification
+def verify_password(password: str, hash: str) -> bool:
+    return hash_password(password) == hash
+
+# Simple JWT implementation (for demonstration)
+def create_token(data: dict):
+    # In real application use PyJWT library
+    # Simplified implementation for demonstration
     expire = int(time.time()) + ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    данные["exp"] = expire
-    данные["iat"] = int(time.time())
+    data["exp"] = expire
+    data["iat"] = int(time.time())
     
-    # Простая "подпись" - в реальном приложении используйте HMAC
-    токен_данные = f"{данные}|{SECRET_KEY}"
-    return hashlib.sha256(токен_данные.encode()).hexdigest()
+    # Simple "signature" - in real application use HMAC
+    token_data = f"{data}|{SECRET_KEY}"
+    return hashlib.sha256(token_data.encode()).hexdigest()
 
-# Проверка токена
-def проверить_токен(токен: str):
+# Token verification
+def verify_token(token: str):
     try:
-        # В реальном приложении здесь была бы проверка подписи JWT
-        # Для демонстрации просто проверяем, что токен существует в базе
-        conn = sqlite3.connect('пользователи.db', check_same_thread=False)
+        # In real application there would be JWT signature verification
+        # For demonstration just check that token exists in database
+        conn = sqlite3.connect('users.db', check_same_thread=False)
         cursor = conn.cursor()
-        cursor.execute('SELECT email FROM пользователи')
+        cursor.execute('SELECT email FROM users')
         emails = [row[0] for row in cursor.fetchall()]
         conn.close()
         
-        # Упрощенная проверка - ищем email в токене
+        # Simplified verification - look for email in token
         for email in emails:
-            тестовый_токен = создать_токен({"sub": email})
-            if тестовый_токен == токен:
+            test_token = create_token({"sub": email})
+            if test_token == token:
                 return {"sub": email}
         
         return None
     except Exception:
         return None
 
-# Получение текущего пользователя
-async def получить_текущего_пользователя(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    токен = credentials.credentials
-    payload = проверить_токен(токен)
+# Get current user
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = verify_token(token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный или просроченный токен",
+            detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -129,23 +138,23 @@ async def получить_текущего_пользователя(credentials
     if email is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный токен",
+            detail="Invalid token",
         )
     
-    пользователь = получить_пользователя_по_email(email)
-    if пользователь is None:
+    user = get_user_by_email(email)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Пользователь не найден",
+            detail="User not found",
         )
     
-    return пользователь
+    return user
 
-# Функции работы с базой данных
-def получить_пользователя_по_email(email: str):
-    conn = sqlite3.connect('пользователи.db', check_same_thread=False)
+# Database functions
+def get_user_by_email(email: str):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, email, password_hash, created_at FROM пользователи WHERE email = ?', (email,))
+    cursor.execute('SELECT id, username, email, password_hash, created_at FROM users WHERE email = ?', (email,))
     row = cursor.fetchone()
     conn.close()
     
@@ -159,10 +168,10 @@ def получить_пользователя_по_email(email: str):
         }
     return None
 
-def получить_пользователя_по_username(username: str):
-    conn = sqlite3.connect('пользователи.db', check_same_thread=False)
+def get_user_by_username(username: str):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, email, password_hash, created_at FROM пользователи WHERE username = ?', (username,))
+    cursor.execute('SELECT id, username, email, password_hash, created_at FROM users WHERE username = ?', (username,))
     row = cursor.fetchone()
     conn.close()
     
@@ -176,12 +185,12 @@ def получить_пользователя_по_username(username: str):
         }
     return None
 
-def создать_пользователя(username: str, email: str, password_hash: str):
-    conn = sqlite3.connect('пользователи.db', check_same_thread=False)
+def create_user(username: str, email: str, password_hash: str):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
     try:
         cursor.execute(
-            'INSERT INTO пользователи (username, email, password_hash) VALUES (?, ?, ?)',
+            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
             (username, email, password_hash)
         )
         conn.commit()
@@ -192,12 +201,12 @@ def создать_пользователя(username: str, email: str, password_
     finally:
         conn.close()
     
-    return получить_пользователя_по_email(email)
+    return get_user_by_email(email)
 
-def получить_всех_пользователей():
-    conn = sqlite3.connect('пользователи.db', check_same_thread=False)
+def get_all_users():
+    conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('SELECT id, username, email, created_at FROM пользователи')
+    cursor.execute('SELECT id, username, email, created_at FROM users')
     rows = cursor.fetchall()
     conn.close()
     
@@ -212,127 +221,128 @@ def получить_всех_пользователей():
     ]
 
 # API endpoints
-@app.on_event("startup")
-async def startup_event():
-    инициализировать_бд()
-
-@app.get("/", response_model=ОтветМодель)
-async def корневой_путь():
-    return ОтветМодель(
-        статус="успех",
-        сообщение="Добро пожаловать в систему авторизации!",
-        данные={
-            "функции": [
-                "Регистрация новых пользователей",
-                "Авторизация по email и паролю",
-                "JWT токены для доступа",
-                "Защищенные маршруты"
+@app.get("/", response_model=ResponseModel)
+async def root_path():
+    return ResponseModel(
+        status="success",
+        message="Welcome to authorization system!",
+        data={
+            "features": [
+                "New user registration",
+                "Authorization by email and password",
+                "JWT tokens for access",
+                "Protected routes"
             ]
         }
     )
 
-@app.post("/регистрация", response_model=ОтветМодель)
-async def регистрация(пользователь: ПользовательСоздание):
-    # Проверка существования пользователя
-    if получить_пользователя_по_email(пользователь.email):
+@app.post("/register", response_model=ResponseModel)
+async def register(user: UserCreate):
+    # Check if user exists
+    if get_user_by_email(user.email):
         raise HTTPException(
             status_code=400,
-            detail="Пользователь с таким email уже существует"
+            detail="User with this email already exists"
         )
     
-    if получить_пользователя_по_username(пользователь.username):
+    if get_user_by_username(user.username):
         raise HTTPException(
             status_code=400,
-            detail="Пользователь с таким именем уже существует"
+            detail="User with this username already exists"
         )
     
-    # Создание пользователя
-    password_hash = хешировать_пароль(пользователь.password)
-    новый_пользователь = создать_пользователя(
-        пользователь.username,
-        пользователь.email,
+    # Create user
+    password_hash = hash_password(user.password)
+    new_user = create_user(
+        user.username,
+        user.email,
         password_hash
     )
     
-    if not новый_пользователь:
+    if not new_user:
         raise HTTPException(
             status_code=400,
-            detail="Ошибка при создании пользователя"
+            detail="Error creating user"
         )
     
-    return ОтветМодель(
-        статус="успех",
-        сообщение="Пользователь успешно зарегистрирован!",
-        данные={
-            "пользователь": {
-                "id": новый_пользователь["id"],
-                "username": новый_пользователь["username"],
-                "email": новый_пользователь["email"]
+    return ResponseModel(
+        status="success",
+        message="User successfully registered!",
+        data={
+            "user": {
+                "id": new_user["id"],
+                "username": new_user["username"],
+                "email": new_user["email"]
             }
         }
     )
 
-@app.post("/вход", response_model=ТокенОтвет)
-async def вход(данные_входа: ПользовательВход):
-    пользователь = получить_пользователя_по_email(данные_входа.email)
+@app.post("/login", response_model=TokenResponse)
+async def login(login_data: UserLogin):
+    user = get_user_by_email(login_data.email)
     
-    if not пользователь or not проверить_пароль(данные_входа.password, пользователь["password_hash"]):
+    if not user or not verify_password(login_data.password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Неверный email или пароль"
+            detail="Invalid email or password"
         )
     
-    access_token = создать_токен({"sub": пользователь["email"]})
+    access_token = create_token({"sub": user["email"]})
     
-    return ТокенОтвет(
+    return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=ПользовательОтвет(
-            id=пользователь["id"],
-            username=пользователь["username"],
-            email=пользователь["email"],
-            created_at=пользователь["created_at"]
+        user=UserResponse(
+            id=user["id"],
+            username=user["username"],
+            email=user["email"],
+            created_at=user["created_at"]
         )
     )
 
-@app.get("/профиль", response_model=ОтветМодель)
-async def получить_профиль(пользователь: dict = Depends(получить_текущего_пользователя)):
-    return ОтветМодель(
-        статус="успех",
-        сообщение="Данные профиля",
-        данные={
-            "пользователь": {
-                "id": пользователь["id"],
-                "username": пользователь["username"],
-                "email": пользователь["email"],
-                "created_at": пользователь["created_at"]
+@app.get("/profile", response_model=ResponseModel)
+async def get_profile(user: dict = Depends(get_current_user)):
+    return ResponseModel(
+        status="success",
+        message="Profile data",
+        data={
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "email": user["email"],
+                "created_at": user["created_at"]
             }
         }
     )
 
-@app.get("/пользователи", response_model=ОтветМодель)
-async def получить_всех_пользователей_эндпоинт():
-    пользователи = получить_всех_пользователей()
-    return ОтветМодель(
-        статус="успех",
-        сообщение=f"Найдено {len(пользователи)} пользователей",
-        данные={"пользователи": пользователи}
+@app.get("/users", response_model=ResponseModel)
+async def get_all_users_endpoint():
+    users = get_all_users()
+    return ResponseModel(
+        status="success",
+        message=f"Found {len(users)} users",
+        data={"users": users}
     )
 
-@app.get("/проверить-токен", response_model=ОтветМодель)
-async def проверить_токен_эндпоинт(пользователь: dict = Depends(получить_текущего_пользователя)):
-    return ОтветМодель(
-        статус="успех",
-        сообщение="Токен действителен",
-        данные={
-            "пользователь": {
-                "id": пользователь["id"],
-                "username": пользователь["username"],
-                "email": пользователь["email"]
+@app.get("/check-token", response_model=ResponseModel)
+async def check_token_endpoint(user: dict = Depends(get_current_user)):
+    return ResponseModel(
+        status="success",
+        message="Token is valid",
+        data={
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "email": user["email"]
             }
         }
     )
+
+# Test endpoint
+@app.get("/test")
+async def test_endpoint():
+    return {"status": "success", "message": "Backend is working!"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="localhost", port=3000, reload=True)
+    uvicorn.run("backend:app", host="localhost", port=3000, reload=True)

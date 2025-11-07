@@ -37,11 +37,11 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  register: (userData) => api.post('/регистрация', userData),
-  login: (credentials) => api.post('/вход', credentials),
-  getProfile: () => api.get('/профиль'),
-  getUsers: () => api.get('/пользователи'),
-  checkToken: () => api.get('/проверить-токен'),
+  register: (userData) => api.post('/register', userData),
+  login: (credentials) => api.post('/login', credentials),
+  getProfile: () => api.get('/profile'),
+  getUsers: () => api.get('/users'),
+  checkToken: () => api.get('/check-token'),
 };
 
 export default api;
