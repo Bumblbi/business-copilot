@@ -5,12 +5,15 @@ const Header = () => {
   const { user, logout, isAuthenticated } = useAuth();
 
   return (
-    <header className="bg-white shadow-sm">
+    <header className="bg-white shadow-sm border-b border-primary-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
-            <Link to="/" className="text-xl font-bold text-gray-900">
-              Система авторизации
+            <Link to="/" className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">CFB</span>
+              </div>
+              <span className="text-xl font-bold text-primary-700">Copilot for Bussines</span>
             </Link>
           </div>
 
@@ -19,23 +22,23 @@ const Header = () => {
               <>
                 <Link
                   to="/profile"
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  className="text-primary-600 hover:text-primary-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   Профиль
                 </Link>
                 <Link
                   to="/users"
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  className="text-primary-600 hover:text-primary-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   Пользователи
                 </Link>
-                <div className="flex items-center space-x-3">
-                  <span className="text-sm text-gray-700">
+                <div className="flex items-center space-x-3 ml-4 pl-4 border-l border-primary-200">
+                  <span className="text-sm text-primary-600 font-medium">
                     {user?.username}
                   </span>
                   <button
                     onClick={logout}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    className="btn-secondary text-sm"
                   >
                     Выйти
                   </button>
@@ -45,13 +48,13 @@ const Header = () => {
               <>
                 <Link
                   to="/login"
-                  className="text-gray-700 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  className="text-primary-600 hover:text-primary-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   Вход
                 </Link>
                 <Link
                   to="/register"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                  className="btn-primary text-sm"
                 >
                   Регистрация
                 </Link>

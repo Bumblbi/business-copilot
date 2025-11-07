@@ -1,9 +1,10 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './hooks/useAuth'; 
-import ProtectedRoute from './components/ProtectedRoute'; 
-import Header from './components/Layout/Header'; 
+import { AuthProvider } from './hooks/useAuth';
+import ProtectedRoute from './components/ProtectedRoute';
+import Header from './components/Layout/Header';
 import Login from './components/Auth/Login';
-import Register from './components/Auth/Register'; 
+import Register from './components/Auth/Register';
+import { authAPI } from './services/api';
 import { useState, useEffect } from 'react';
 
 const Home = () => {
@@ -22,27 +23,34 @@ const Home = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
+      <div className="max-w-6xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-8">
-            Добро пожаловать в систему авторизации!
+          <div className="w-24 h-24 bg-green-500 rounded-2xl mx-auto mb-8 flex items-center justify-center shadow-lg">
+            <span className="text-white text-3xl font-bold">CFB</span>
+          </div>
+          <h1 className="text-5xl font-bold text-green-800 mb-6">
+            Добро пожаловать в помощник для бизнеса!
           </h1>
-          <p className="text-xl text-gray-600 mb-8">
-            Система регистрации и авторизации пользователей
+          <p className="text-xl text-green-600 mb-12 max-w-2xl mx-auto leading-relaxed">
+            Современная и полезная помощь новым предпринимателям
           </p>
           
           {apiInfo?.data?.функции && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Функции системы:</h2>
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+            <div className="bg-white rounded-lg shadow-sm border border-green-100 p-8 max-w-4xl mx-auto">
+              <h2 className="text-3xl font-bold text-green-700 mb-8 text-center">
+                Возможности системы
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {apiInfo.data.функции.map((func, index) => (
-                  <li key={index} className="flex items-center">
-                    <span className="w-2 h-2 bg-blue-600 rounded-full mr-3"></span>
-                    {func}
-                  </li>
+                  <div key={index} className="flex items-start space-x-4 p-4 rounded-lg bg-green-50 border border-green-100">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                      <span className="text-white text-sm font-bold">✓</span>
+                    </div>
+                    <span className="text-green-700 font-medium">{func}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
           )}
         </div>
@@ -52,7 +60,6 @@ const Home = () => {
 };
 
 const Profile = () => {
-  const { user } = useAuth();
   const [profile, setProfile] = useState(null);
 
   useEffect(() => {
@@ -68,27 +75,27 @@ const Profile = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-green-50 py-8">
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Профиль пользователя</h1>
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <h1 className="text-2xl font-bold text-green-800 mb-6">Профиль пользователя</h1>
           
           {profile?.data?.пользователь && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">ID</label>
+                <label className="block text-sm font-medium text-green-700">ID</label>
                 <p className="mt-1 text-sm text-gray-900">{profile.data.пользователь.id}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Имя пользователя</label>
+                <label className="block text-sm font-medium text-green-700">Имя пользователя</label>
                 <p className="mt-1 text-sm text-gray-900">{profile.data.пользователь.username}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Email</label>
+                <label className="block text-sm font-medium text-green-700">Email</label>
                 <p className="mt-1 text-sm text-gray-900">{profile.data.пользователь.email}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Дата регистрации</label>
+                <label className="block text-sm font-medium text-green-700">Дата регистрации</label>
                 <p className="mt-1 text-sm text-gray-900">{profile.data.пользователь.created_at}</p>
               </div>
             </div>
@@ -119,38 +126,38 @@ const Users = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen bg-green-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-green-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h1 className="text-2xl font-bold text-gray-900">Список пользователей</h1>
+        <div className="bg-white rounded-lg shadow-sm">
+          <div className="px-6 py-4 border-b border-green-200">
+            <h1 className="text-2xl font-bold text-green-800">Список пользователей</h1>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-green-200">
+              <thead className="bg-green-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-green-500 uppercase tracking-wider">
                     ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-green-500 uppercase tracking-wider">
                     Имя пользователя
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-green-500 uppercase tracking-wider">
                     Email
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-green-500 uppercase tracking-wider">
                     Дата регистрации
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-green-200">
                 {users.map((user) => (
                   <tr key={user.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -180,7 +187,7 @@ function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-green-50">
           <Header />
           <Routes>
             <Route path="/" element={<Home />} />
@@ -209,4 +216,4 @@ function App() {
   );
 }
 
-export default App;
+export default App; 
