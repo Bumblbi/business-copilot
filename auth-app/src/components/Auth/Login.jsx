@@ -1,41 +1,59 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { Link, useNavigate } from 'react-router-dom';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, error, loading } = useAuth();
+  const { login, error, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // Если пользователь уже авторизован, перенаправляем на главную
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const result = await login(email, password);
     
     if (result.success) {
-      navigate('/profile');
+      navigate('/');
     }
   };
 
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-green-700">Перенаправление на главную...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
-        <div className="card p-8">
+        <div className="bg-white rounded-lg shadow-sm border border-green-100 p-8">
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-primary-500 rounded-full flex items-center justify-center mb-4">
+            <div className="mx-auto w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4">
               <span className="text-white text-2xl font-bold">→</span>
             </div>
-            <h2 className="text-3xl font-bold text-primary-700">
+            <h2 className="text-3xl font-bold text-green-700">
               Вход в систему
             </h2>
-            <p className="mt-2 text-primary-600">
+            <p className="mt-2 text-green-600">
               Войдите в свой аккаунт
             </p>
           </div>
           
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-primary-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-green-700 mb-2">
                 Email
               </label>
               <input
@@ -44,15 +62,16 @@ const Login = () => {
                 type="email"
                 autoComplete="email"
                 required
-                className="input-field"
+                className="w-full px-3 py-2 border border-green-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors duration-200"
                 placeholder="your@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
               />
             </div>
             
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-primary-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-green-700 mb-2">
                 Пароль
               </label>
               <input
@@ -61,10 +80,11 @@ const Login = () => {
                 type="password"
                 autoComplete="current-password"
                 required
-                className="input-field"
+                className="w-full px-3 py-2 border border-green-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors duration-200"
                 placeholder="Ваш пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
               />
             </div>
 
@@ -82,7 +102,7 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full btn-primary py-3 text-base font-medium"
+              className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {loading ? (
                 <span className="flex items-center justify-center">
@@ -95,12 +115,12 @@ const Login = () => {
               ) : 'Войти'}
             </button>
 
-            <div className="text-center pt-4 border-t border-primary-100">
-              <p className="text-primary-600">
+            <div className="text-center pt-4 border-t border-green-100">
+              <p className="text-green-600">
                 Нет аккаунта?{' '}
                 <Link
                   to="/register"
-                  className="font-medium text-primary-500 hover:text-primary-600 transition-colors duration-200"
+                  className="font-medium text-green-500 hover:text-green-600 transition-colors duration-200"
                 >
                   Зарегистрируйтесь
                 </Link>

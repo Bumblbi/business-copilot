@@ -5,9 +5,11 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 import sqlite3
 import hashlib
+import jwt
 from datetime import datetime, timedelta
 import time
 from contextlib import asynccontextmanager
+from MachineLearning.DeepSeek_client import DeepSeekClient
 
 # Settings
 SECRET_KEY = "my-secret-key-2024-very-secure-key"
@@ -82,6 +84,24 @@ class ResponseModel(BaseModel):
     message: str
     data: Optional[dict] = None
 
+
+    # Классы Чата
+class ChatMessage(BaseModel):
+    message: str
+    conversation_history: Optional[List[dict]] = None
+
+class ChatResponse(BaseModel):
+    status: str
+    message: str
+    response: str
+    conversation_history: Optional[List[dict]] = None
+
+class BusinessAdviceRequest(BaseModel):
+    business_type: str
+    question: str
+    budget: Optional[str] = None
+    experience: Optional[str] = None
+
 # Password hashing
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
@@ -92,36 +112,23 @@ def verify_password(password: str, hash: str) -> bool:
 
 # Simple JWT implementation (for demonstration)
 def create_token(data: dict):
-    # In real application use PyJWT library
-    # Simplified implementation for demonstration
-    expire = int(time.time()) + ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    data["exp"] = expire
-    data["iat"] = int(time.time())
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    data.update({"exp": expire})
     
-    # Simple "signature" - in real application use HMAC
-    token_data = f"{data}|{SECRET_KEY}"
-    return hashlib.sha256(token_data.encode()).hexdigest()
+    # Используем PyJWT для создания токена
+    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
 
-# Token verification
 def verify_token(token: str):
     try:
-        # In real application there would be JWT signature verification
-        # For demonstration just check that token exists in database
-        conn = sqlite3.connect('users.db', check_same_thread=False)
-        cursor = conn.cursor()
-        cursor.execute('SELECT email FROM users')
-        emails = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        
-        # Simplified verification - look for email in token
-        for email in emails:
-            test_token = create_token({"sub": email})
-            if test_token == token:
-                return {"sub": email}
-        
+        # Декодируем токен с помощью PyJWT
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
         return None
-    except Exception:
+    except jwt.InvalidTokenError:
         return None
+    
 
 # Get current user
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -219,6 +226,9 @@ def get_all_users():
         }
         for row in rows
     ]
+
+# Инициализация DeepSeek
+deepseek_client = DeepSeekClient()
 
 # API endpoints
 @app.get("/", response_model=ResponseModel)
@@ -338,10 +348,190 @@ async def check_token_endpoint(user: dict = Depends(get_current_user)):
         }
     )
 
-# Test endpoint
+@app.post("/chat/send", response_model=ChatResponse)
+async def send_chat_message(
+    chat_data: ChatMessage,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Отправка сообщения в чат с DeepSeek
+    """
+    try:
+        # Формируем сообщения для API
+        messages = []
+        
+        # Добавляем системный промпт для бизнес-контекста
+        system_prompt = {
+            "role": "system", 
+            "content": "Ты - экспертный помощник по малому бизнесу. Давай практические, конкретные советы для предпринимателей. Отвечай на русском языке."
+        }
+        messages.append(system_prompt)
+        
+        # Добавляем историю диалога если есть
+        if chat_data.conversation_history:
+            messages.extend(chat_data.conversation_history)
+        
+        # Добавляем текущее сообщение пользователя
+        user_message = {"role": "user", "content": chat_data.message}
+        messages.append(user_message)
+        
+        # Отправляем запрос к DeepSeek
+        response = deepseek_client.chat_completion(messages)
+        
+        if not response:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при получении ответа от AI"
+            )
+        
+        # Обновляем историю диалога
+        updated_history = chat_data.conversation_history or []
+        updated_history.append(user_message)
+        updated_history.append({"role": "assistant", "content": response})
+        
+        return ChatResponse(
+            status="success",
+            message="Chat message processed successfully",
+            response=response,
+            conversation_history=updated_history
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing chat message: {str(e)}"
+        )
+
+@app.post("/chat/business-advice", response_model=ChatResponse)
+async def get_business_advice(
+    advice_request: BusinessAdviceRequest,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Специализированный эндпоинт для бизнес-консультаций
+    """
+    try:
+        # Формируем контекстный промпт
+        context_parts = []
+        
+        if advice_request.business_type:
+            context_parts.append(f"тип бизнеса: {advice_request.business_type}")
+        if advice_request.budget:
+            context_parts.append(f"бюджет: {advice_request.budget}")
+        if advice_request.experience:
+            context_parts.append(f"опыт: {advice_request.experience}")
+        
+        context = ", ".join(context_parts)
+        
+        prompt = f"""
+        Как эксперт по малому бизнесу, дай практический совет по следующему запросу:
+        
+        Контекст: {context}
+        Вопрос: {advice_request.question}
+        
+        Дай структурированный ответ с конкретными шагами и рекомендациями.
+        """
+        
+        messages = [
+            {
+                "role": "system",
+                "content": "Ты - опытный бизнес-консультант с экспертизой в малом бизнесе. Давай практические, реалистичные советы с четкими шагами."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+        
+        response = deepseek_client.chat_completion(messages)
+        
+        if not response:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при получении бизнес-совета"
+            )
+        
+        return ChatResponse(
+            status="success",
+            message="Business advice generated successfully",
+            response=response
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating business advice: {str(e)}"
+        )
+
+
+# Эндпоинты чата
+@app.post("/chat/quick", response_model=ChatResponse)
+async def quick_chat(
+    chat_data: ChatMessage,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Быстрый чат без сохранения истории
+    """
+    try:
+        response = deepseek_client.quick_chat(chat_data.message)
+        
+        if not response:
+            raise HTTPException(
+                status_code=500,
+                detail="Ошибка при получении ответа от AI"
+            )
+        
+        return ChatResponse(
+            status="success",
+            message="Quick chat message processed",
+            response=response
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error in quick chat: {str(e)}"
+        )
+
+@app.get("/chat/models")
+async def get_available_models(user: dict = Depends(get_current_user)):
+    """
+    Получение информации о доступных моделях
+    """
+    return {
+        "status": "success",
+        "current_model": "deepseek/deepseek-chat",
+        "features": [
+            "Бизнес-консультации",
+            "Общий чат",
+            "Быстрые ответы"
+        ]
+    }
+
+
 @app.get("/test")
 async def test_endpoint():
-    return {"status": "success", "message": "Backend is working!"}
+    # Тестируем базовую функциональность и DeepSeek
+    test_message = "Привет! Ответь коротко - ты работаешь?"
+    
+    try:
+        # Тест DeepSeek
+        ai_response = deepseek_client.quick_chat(test_message)
+        ai_status = "working" if ai_response else "not working"
+        
+        return {
+            "status": "success", 
+            "message": "Backend is working!",
+            "ai_status": ai_status,
+            "ai_test_response": ai_response[:100] + "..." if ai_response else None
+        }
+    except Exception as e:
+        return {
+            "status": "success",
+            "message": "Backend is working but AI test failed",
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn

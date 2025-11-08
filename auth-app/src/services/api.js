@@ -42,6 +42,7 @@ export const authAPI = {
   getProfile: () => api.get('/profile'),
   getUsers: () => api.get('/users'),
   checkToken: () => api.get('/check-token'),
+  chat: (message) => api.post('/chat', { message }),
+  chatPublic: (message) => api.post('/chat/public', { message }),
 };
-
 export default api;

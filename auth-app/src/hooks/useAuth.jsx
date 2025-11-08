@@ -1,7 +1,7 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { authAPI } from '../services/api';
 
-const AuthContext = createContext(); // Было Authortext
+const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -26,11 +26,14 @@ export const AuthProvider = ({ children }) => {
 
     if (token && savedUser) {
       try {
-        await authAPI.checkToken();
+        // Проверяем валидность токена
+        const response = await authAPI.checkToken();
         setUser(JSON.parse(savedUser));
       } catch (error) {
         console.error('Token validation failed:', error);
-        logout();
+        // Если токен невалидный, очищаем localStorage
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
       }
     }
     setLoading(false);
@@ -43,6 +46,7 @@ export const AuthProvider = ({ children }) => {
       
       const { access_token, user: userData } = response.data;
       
+      // Сохраняем в localStorage
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
@@ -60,7 +64,12 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       const response = await authAPI.register({ username, email, password });
       
-      return await login(email, password);
+      if (response.data.status === 'success') {
+        // После успешной регистрации автоматически входим
+        return await login(email, password);
+      } else {
+        throw new Error('Registration failed');
+      }
     } catch (error) {
       const errorMessage = error.response?.data?.detail || 'Ошибка регистрации';
       setError(errorMessage);
@@ -69,10 +78,17 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    // Очищаем localStorage при выходе
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     setUser(null);
     setError(null);
+  };
+
+  // Функция для обновления данных пользователя
+  const updateUser = (userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const value = {
@@ -82,11 +98,12 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    updateUser,
     isAuthenticated: !!user,
   };
 
   return (
-    <AuthContext.Provider value={value}> {/* Было Authortext.Provider */}
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
