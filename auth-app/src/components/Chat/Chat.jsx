@@ -17,12 +17,12 @@ const Chat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Начальное сообщение при загрузке
+  // Начальное сообщение
   useEffect(() => {
     setMessages([
       {
         id: 1,
-        text: "Привет! Я ваш AI помощник. Задавайте любые вопросы!",
+        text: "Привет! Я ваш AI бизнес-помощник. Задавайте вопросы по ведению бизнеса!",
         isUser: false,
         timestamp: new Date().toLocaleTimeString(),
       }
@@ -31,7 +31,6 @@ const Chat = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    
     if (!inputMessage.trim()) return;
 
     const userMessage = {
@@ -47,10 +46,19 @@ const Chat = () => {
 
     try {
       let response;
+
+      // Используем полноценный чат с историей, если авторизован
       if (isAuthenticated) {
-        response = await authAPI.chat({ message: inputMessage });
+        // Собираем историю в формате, понятном бэкенду
+        const conversationHistory = messages.slice(1).map(m => ({
+          role: m.isUser ? 'user' : 'assistant',
+          content: m.text
+        }));
+
+        response = await authAPI.sendChatMessage(inputMessage, conversationHistory);
       } else {
-        response = await authAPI.chatPublic({ message: inputMessage });
+        // Гостевой режим — быстрый чат
+        response = await authAPI.quickChat(inputMessage);
       }
 
       const aiMessage = {
@@ -65,7 +73,7 @@ const Chat = () => {
       console.error('Chat error:', error);
       const errorMessage = {
         id: Date.now() + 1,
-        text: "Извините, произошла ошибка. Пожалуйста, попробуйте еще раз.",
+        text: "Не удалось получить ответ от AI. Проверьте подключение или попробуйте позже.",
         isUser: false,
         timestamp: new Date().toLocaleTimeString(),
       };
@@ -86,14 +94,14 @@ const Chat = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          {/* Заголовок чата */}
+          {/* Заголовок */}
           <div className="bg-gradient-to-r from-green-500 to-blue-500 p-6 text-white">
             <div className="flex items-center space-x-4">
               <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
                 <span className="text-green-500 text-xl font-bold">AI</span>
               </div>
               <div>
-                <h1 className="text-2xl font-bold">AI Помощник</h1>
+                <h1 className="text-2xl font-bold">AI Бизнес-помощник</h1>
                 <p className="text-green-100">
                   {isAuthenticated ? `Добро пожаловать, ${user?.username}!` : 'Гостевой режим'}
                 </p>
@@ -101,7 +109,7 @@ const Chat = () => {
             </div>
           </div>
 
-          {/* Область сообщений */}
+          {/* Сообщения */}
           <div className="h-96 overflow-y-auto p-4 bg-gray-50">
             {messages.map((message) => (
               <div
@@ -116,11 +124,7 @@ const Chat = () => {
                   }`}
                 >
                   <div className="text-sm">{message.text}</div>
-                  <div
-                    className={`text-xs mt-1 ${
-                      message.isUser ? 'text-green-100' : 'text-gray-500'
-                    }`}
-                  >
+                  <div className={`text-xs mt-1 ${message.isUser ? 'text-green-100' : 'text-gray-500'}`}>
                     {message.timestamp}
                   </div>
                 </div>
@@ -140,7 +144,7 @@ const Chat = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Форма ввода */}
+          {/* Ввод */}
           <div className="border-t border-gray-200 p-4 bg-white">
             <form onSubmit={handleSendMessage} className="flex space-x-4">
               <div className="flex-1">
@@ -148,7 +152,9 @@ const Chat = () => {
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Введите ваше сообщение..."
+                  placeholder={isAuthenticated 
+                    ? "Введите сообщение... (с историей)" 
+                    : "Введите сообщение... (гостевой режим)"}
                   className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
                   rows="2"
                   disabled={loading}
@@ -160,18 +166,8 @@ const Chat = () => {
                 className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-2xl font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
                 <span>Отправить</span>
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                  />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               </button>
             </form>
@@ -181,29 +177,28 @@ const Chat = () => {
           </div>
         </div>
 
-        {/* Информационная панель */}
+        {/* Инфо-панель */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100">
             <h3 className="font-semibold text-green-700 mb-2">💡 Примеры вопросов</h3>
             <ul className="text-sm text-gray-600 space-y-1">
-              <li>• "Привет, как дела?"</li>
-              <li>• "Какая сейчас погода?"</li>
-              <li>• "Сколько время?"</li>
-              <li>• "Расскажи о себе"</li>
+              <li>• "Как открыть кофейню с нуля?"</li>
+              <li>• "Совет по маркетингу для малого бизнеса"</li>
+              <li>• "Бюджет 100 тыс. руб. — с чего начать?"</li>
             </ul>
           </div>
           <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
-            <h3 className="font-semibold text-blue-700 mb-2">ℹ️ О чате</h3>
+            <h3 className="font-semibold text-blue-700 mb-2">ℹ️ Как работает</h3>
             <p className="text-sm text-gray-600">
-              Это демо-версия AI чата. В реальном приложении здесь будет интеграция с мощными нейросетевыми моделями.
+              Авторизованные пользователи сохраняют контекст. Гости получают ответы без памяти.
             </p>
           </div>
           <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-100">
             <h3 className="font-semibold text-purple-700 mb-2">🔐 Статус</h3>
             <p className="text-sm text-gray-600">
               {isAuthenticated 
-                ? "Вы авторизованы. Чат сохраняет контекст."
-                : "Гостевой режим. Функции ограничены."
+                ? "Вы авторизованы. Чат помнит историю." 
+                : "Гостевой режим. Нет контекста."
               }
             </p>
           </div>

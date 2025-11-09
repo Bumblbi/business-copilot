@@ -42,7 +42,14 @@ export const authAPI = {
   getProfile: () => api.get('/profile'),
   getUsers: () => api.get('/users'),
   checkToken: () => api.get('/check-token'),
-  chat: (message) => api.post('/chat', { message }),
-  chatPublic: (message) => api.post('/chat/public', { message }),
+  sendChatMessage: (message, history = null) =>
+    api.post('/chat/send', { message, conversation_history: history }),
+
+  getBusinessAdvice: (data) =>
+    api.post('/chat/business-advice', data),
+
+  quickChat: (message) =>
+    api.post('/chat/quick', { message }),
 };
+
 export default api;
