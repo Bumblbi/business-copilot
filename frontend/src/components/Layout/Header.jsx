@@ -40,18 +40,31 @@ const Header = () => {
           <nav className="flex items-center space-x-4">
             {isAuthenticated ? (
               <>
+                {/* Ссылка на чат */}
                 <Link
                   to="/chat"
                   className="text-green-600 hover:text-green-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   AI Чат
                 </Link>
+
+                {/* ✅ Новая ссылка: Бизнес-совет */}
+                <Link
+                  to="/advice"
+                  className="text-blue-600 hover:text-blue-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+                >
+                  Советы
+                </Link>
+
+                {/* Ссылка на профиль */}
                 <Link
                   to="/profile"
                   className="text-green-600 hover:text-green-700 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   Профиль
                 </Link>
+
+                {/* Блок профиля и выхода */}
                 <div className="flex items-center space-x-3 ml-4 pl-4 border-l border-green-200">
                   <span className="text-sm text-green-600 font-medium">
                     {user?.username}

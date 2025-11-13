@@ -4,9 +4,12 @@ import { authAPI } from '../../services/api';
 
 const Chat = () => {
   const { user, isAuthenticated } = useAuth();
+  const [chats, setChats] = useState([]);
+  const [currentChat, setCurrentChat] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -17,17 +20,68 @@ const Chat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Начальное сообщение
-  useEffect(() => {
-    setMessages([
-      {
-        id: 1,
-        text: "Привет! Я ваш AI бизнес-помощник. Задавайте вопросы по ведению бизнеса!",
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString(),
+  // Загрузка списка чатов
+  const fetchChats = async () => {
+    if (!isAuthenticated) return;
+    try {
+      const res = await authAPI.getChats();
+      setChats(res.data);
+      if (res.data.length > 0 && !currentChat) {
+        loadChat(res.data[0].id);
+      } else if (res.data.length === 0) {
+        const newChat = await authAPI.createChat({ title: "Первый чат" });
+        setChats([newChat.data]);
+        setCurrentChat(newChat.data);
       }
-    ]);
-  }, []);
+    } catch (error) {
+      console.error('Ошибка загрузки чатов:', error);
+    }
+  };
+
+  // Загрузка чата
+  const loadChat = async (chatId) => {
+    try {
+      const res = await authAPI.getChat(chatId);
+      setCurrentChat(res.data.chat);
+      setMessages(
+        res.data.messages.map((m) => ({
+          id: m.id,
+          text: m.content,
+          isUser: m.role === 'user',
+          timestamp: new Date(m.created_at).toLocaleTimeString(),
+        }))
+      );
+    } catch (error) {
+      console.error('Ошибка загрузки чата:', error);
+    }
+  };
+
+  // Создание нового чата
+  const createNewChat = async () => {
+    try {
+      const res = await authAPI.createChat({ title: "Новый чат" });
+      setChats((prev) => [res.data, ...prev]);
+      setCurrentChat(res.data);
+      setMessages([]);
+    } catch (error) {
+      console.error('Ошибка создания чата:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchChats();
+    } else {
+      setMessages([
+        {
+          id: 1,
+          text: "Привет! Я ваш AI бизнес-помощник. Задавайте вопросы по ведению бизнеса!",
+          isUser: false,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+      ]);
+    }
+  }, [isAuthenticated]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -40,24 +94,16 @@ const Chat = () => {
       timestamp: new Date().toLocaleTimeString(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInputMessage('');
     setLoading(true);
 
     try {
       let response;
 
-      // Используем полноценный чат с историей, если авторизован
-      if (isAuthenticated) {
-        // Собираем историю в формате, понятном бэкенду
-        const conversationHistory = messages.slice(1).map(m => ({
-          role: m.isUser ? 'user' : 'assistant',
-          content: m.text
-        }));
-
-        response = await authAPI.sendChatMessage(inputMessage, conversationHistory);
+      if (isAuthenticated && currentChat) {
+        response = await authAPI.sendMessageToChat(currentChat.id, inputMessage);
       } else {
-        // Гостевой режим — быстрый чат
         response = await authAPI.quickChat(inputMessage);
       }
 
@@ -68,16 +114,20 @@ const Chat = () => {
         timestamp: new Date().toLocaleTimeString(),
       };
 
-      setMessages(prev => [...prev, aiMessage]);
+      setMessages((prev) => [...prev, aiMessage]);
+
+      if (isAuthenticated && currentChat) {
+        loadChat(currentChat.id);
+      }
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error('Ошибка отправки сообщения:', error);
       const errorMessage = {
         id: Date.now() + 1,
-        text: "Не удалось получить ответ от AI. Проверьте подключение или попробуйте позже.",
+        text: 'Не удалось получить ответ. Проверьте подключение.',
         isUser: false,
         timestamp: new Date().toLocaleTimeString(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
@@ -91,117 +141,168 @@ const Chat = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-          {/* Заголовок */}
-          <div className="bg-gradient-to-r from-green-500 to-blue-500 p-6 text-white">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
-                <span className="text-green-500 text-xl font-bold">AI</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">AI Бизнес-помощник</h1>
-                <p className="text-green-100">
-                  {isAuthenticated ? `Добро пожаловать, ${user?.username}!` : 'Гостевой режим'}
-                </p>
-              </div>
-            </div>
+    <div className="flex h-screen bg-gray-50">
+      {/* Боковая панель */}
+      {isAuthenticated && (
+        <div
+          className={`${
+            sidebarOpen ? 'w-64' : 'w-0'
+          } bg-white border-r border-gray-200 flex flex-col transition-all duration-300 overflow-hidden`}
+        >
+          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800">Чаты</h2>
+            <button
+              onClick={createNewChat}
+              className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg text-sm transition"
+              title="Новый чат"
+            >
+              +
+            </button>
           </div>
-
-          {/* Сообщения */}
-          <div className="h-96 overflow-y-auto p-4 bg-gray-50">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.isUser ? 'justify-end' : 'justify-start'} mb-4`}
-              >
+          <div className="flex-1 overflow-y-auto">
+            {chats.length === 0 ? (
+              <p className="text-gray-500 text-sm p-4">Нет чатов</p>
+            ) : (
+              chats.map((chat) => (
                 <div
-                  className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
-                    message.isUser
-                      ? 'bg-green-500 text-white rounded-br-none'
-                      : 'bg-white text-gray-800 rounded-bl-none shadow-sm'
+                  key={chat.id}
+                  onClick={() => loadChat(chat.id)}
+                  className={`p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${
+                    currentChat?.id === chat.id ? 'bg-blue-50 border-l-4 border-l-green-500' : ''
                   }`}
                 >
-                  <div className="text-sm">{message.text}</div>
-                  <div className={`text-xs mt-1 ${message.isUser ? 'text-green-100' : 'text-gray-500'}`}>
-                    {message.timestamp}
+                  <div className="font-medium text-sm truncate">{chat.title}</div>
+                  <div className="text-xs text-gray-500">
+                    {new Date(chat.updated_at).toLocaleDateString()}
                   </div>
                 </div>
-              </div>
-            ))}
-            {loading && (
-              <div className="flex justify-start mb-4">
-                <div className="bg-white text-gray-800 px-4 py-3 rounded-2xl rounded-bl-none shadow-sm">
-                  <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-                  </div>
-                </div>
-              </div>
+              ))
             )}
-            <div ref={messagesEndRef} />
           </div>
+        </div>
+      )}
 
-          {/* Ввод */}
-          <div className="border-t border-gray-200 p-4 bg-white">
-            <form onSubmit={handleSendMessage} className="flex space-x-4">
-              <div className="flex-1">
-                <textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={isAuthenticated 
-                    ? "Введите сообщение... (с историей)" 
-                    : "Введите сообщение... (гостевой режим)"}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  rows="2"
-                  disabled={loading}
+      {/* Основной чат */}
+      <div className="flex-1 flex flex-col">
+        {/* Заголовок */}
+        <div className="bg-gradient-to-r from-green-500 to-blue-500 p-4 text-white shadow-md">
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden text-white hover:text-green-100"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
                 />
-              </div>
-              <button
-                type="submit"
-                disabled={loading || !inputMessage.trim()}
-                className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-2xl font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-              >
-                <span>Отправить</span>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-              </button>
-            </form>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              Нажмите Enter для отправки, Shift+Enter для новой строки
-            </p>
+              </svg>
+            </button>
+            <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+              <span className="text-green-500 font-bold">AI</span>
+            </div>
+            <div>
+              <h1 className="font-bold">
+                {currentChat ? currentChat.title : 'AI Бизнес-помощник'}
+              </h1>
+              <p className="text-green-100 text-sm">
+                {isAuthenticated ? `Чат #${currentChat?.id || '?'}` : 'Гостевой режим'}
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Инфо-панель */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-green-100">
-            <h3 className="font-semibold text-green-700 mb-2">💡 Примеры вопросов</h3>
-            <ul className="text-sm text-gray-600 space-y-1">
-              <li>• "Как открыть кофейню с нуля?"</li>
-              <li>• "Совет по маркетингу для малого бизнеса"</li>
-              <li>• "Бюджет 100 тыс. руб. — с чего начать?"</li>
-            </ul>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-blue-100">
-            <h3 className="font-semibold text-blue-700 mb-2">ℹ️ Как работает</h3>
-            <p className="text-sm text-gray-600">
-              Авторизованные пользователи сохраняют контекст. Гости получают ответы без памяти.
-            </p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-purple-100">
-            <h3 className="font-semibold text-purple-700 mb-2">🔐 Статус</h3>
-            <p className="text-sm text-gray-600">
-              {isAuthenticated 
-                ? "Вы авторизованы. Чат помнит историю." 
-                : "Гостевой режим. Нет контекста."
-              }
-            </p>
-          </div>
+        {/* Сообщения */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+          {messages.length === 0 && isAuthenticated && (
+            <div className="text-center text-gray-500 mt-8">
+              Выберите чат или создайте новый
+            </div>
+          )}
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.isUser ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
+                  message.isUser
+                    ? 'bg-green-500 text-white rounded-br-none'
+                    : 'bg-white text-gray-800 rounded-bl-none shadow'
+                }`}
+              >
+                {/* ✅ Ключевое изменение: whitespace-pre-line */}
+                <div className="text-sm whitespace-pre-line">{message.text}</div>
+
+                <div
+                  className={`text-xs mt-1 ${
+                    message.isUser ? 'text-green-100' : 'text-gray-500'
+                  }`}
+                >
+                  {message.timestamp}
+                </div>
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-white px-4 py-3 rounded-2xl rounded-bl-none shadow">
+                <div className="flex space-x-2">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '0.2s' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: '0.4s' }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Ввод */}
+        <div className="border-t border-gray-200 p-4 bg-white">
+          <form onSubmit={handleSendMessage} className="flex space-x-4">
+            <div className="flex-1">
+              <textarea
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={
+                  isAuthenticated
+                    ? 'Введите сообщение...'
+                    : 'Гостевой режим: без сохранения истории'
+                }
+                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                rows="2"
+                disabled={loading || (isAuthenticated && !currentChat)}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading || !inputMessage.trim() || (isAuthenticated && !currentChat)}
+              className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-2xl font-medium transition disabled:opacity-50 flex items-center space-x-2"
+            >
+              <span>Отправить</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            </button>
+          </form>
+          <p className="text-xs text-gray-500 mt-2 text-center">
+            Enter — отправить, Shift+Enter — новая строка
+          </p>
         </div>
       </div>
     </div>

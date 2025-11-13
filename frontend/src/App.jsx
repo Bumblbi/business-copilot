@@ -5,6 +5,7 @@ import Header from './components/Layout/Header';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import Chat from './components/Chat/Chat';
+import BusinessAdvice from './components/BusinessAdvice/BusinessAdvice';
 import { authAPI } from './services/api';
 import { useState, useEffect } from 'react';
 
@@ -150,6 +151,14 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/chat" element={<Chat />} />
+            <Route
+              path="/advice"
+              element={
+                <ProtectedRoute>
+                  <BusinessAdvice />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/profile"
               element={

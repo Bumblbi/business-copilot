@@ -3,23 +3,55 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
+import sys
+import os
 import sqlite3
 import hashlib
 import jwt
 from datetime import datetime, timedelta
-import time
 from contextlib import asynccontextmanager
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from MachineLearning.DeepSeek_client import DeepSeekClient
 
-# Settings
+# Настройки
 SECRET_KEY = "my-secret-key-2024-very-secure-key"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Database functions (must be declared before lifespan)
+# Единый системный промпт для всех AI-ответов
+SYSTEM_PROMPT = """
+Ты — экспертный бизнес-консультант. Отвечай на русском языке. ОБЯЗАТЕЛЬНО форматируй ответ по следующим правилам:
+
+1. НЕ используй Markdown (**, ###, ``` и т.п.).
+2. Каждый логический блок — с новой строки.
+3. Списки оформляй ТОЛЬКО через "•" в начале строки, каждый пункт — с новой строки.
+4. Заголовки пиши ЗАГЛАВНЫМИ буквами, выдели их ПУСТОЙ СТРОКОЙ до и после.
+5. Не используй смайлики.
+6. Всегда используй минимум 2 абзаца, если вопрос требует развёрнутого ответа.
+
+Пример:
+ВЫГОДНЫЕ НИШИ В 2024
+
+• Онлайн-образование — высокий спрос
+• Кибербезопасность для малого бизнеса
+• Эко-товары и упаковка
+
+РАСПРЕДЕЛЕНИЕ БЮДЖЕТА
+
+• 40% — маркетинг
+• 30% — продукт
+• 20% — команду
+• 10% — резерв
+
+Если вопрос не по теме, скажи:
+"Извините, но я не могу помочь с этой задачей. Я являюсь AI-помощником в сфере малого бизнеса."
+""".strip()
+
+# Функции для работы с БД
 def init_db():
     conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
-    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,16 +61,49 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
     conn.commit()
     conn.close()
 
+
+def init_chat_db():
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            title TEXT DEFAULT 'Новый чат',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+        )
+    ''')
+
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_chats_user ON chats(user_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id)')
+
+    conn.commit()
+    conn.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
+    init_chat_db()
     yield
-    # Shutdown (can add connection closing logic)
+
 
 app = FastAPI(
     title="Authorization System",
@@ -47,7 +112,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
@@ -58,15 +122,18 @@ app.add_middleware(
 
 security = HTTPBearer()
 
-# Data models
+
+# Модели
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
 
+
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
 
 class UserResponse(BaseModel):
     id: int
@@ -74,10 +141,12 @@ class UserResponse(BaseModel):
     email: str
     created_at: str
 
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
+
 
 class ResponseModel(BaseModel):
     status: str
@@ -85,10 +154,10 @@ class ResponseModel(BaseModel):
     data: Optional[dict] = None
 
 
-    # Классы Чата
 class ChatMessage(BaseModel):
     message: str
     conversation_history: Optional[List[dict]] = None
+
 
 class ChatResponse(BaseModel):
     status: str
@@ -96,41 +165,64 @@ class ChatResponse(BaseModel):
     response: str
     conversation_history: Optional[List[dict]] = None
 
+
 class BusinessAdviceRequest(BaseModel):
     business_type: str
     question: str
     budget: Optional[str] = None
     experience: Optional[str] = None
 
-# Password hashing
+
+class ChatResponseModel(BaseModel):
+    id: int
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class MessageModel(BaseModel):
+    id: int
+    chat_id: int
+    role: str
+    content: str
+    created_at: str
+
+
+class ChatDetailResponse(BaseModel):
+    chat: ChatResponseModel
+    messages: List[MessageModel]
+
+
+class NewChatRequest(BaseModel):
+    title: str = "Новый чат"
+
+
+# Хеширование паролей
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Password verification
+
 def verify_password(password: str, hash: str) -> bool:
     return hash_password(password) == hash
 
-# Simple JWT implementation (for demonstration)
+
+# JWT
 def create_token(data: dict):
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     data.update({"exp": expire})
-    
-    # Используем PyJWT для создания токена
-    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm="HS256")
-    return encoded_jwt
+    return jwt.encode(data, SECRET_KEY, algorithm="HS256")
+
 
 def verify_token(token: str):
     try:
-        # Декодируем токен с помощью PyJWT
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return payload
+        return jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
         return None
-    
 
-# Get current user
+
+# Получение текущего пользователя
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     payload = verify_token(token)
@@ -140,40 +232,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
     email = payload.get("sub")
     if email is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = get_user_by_email(email)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
-# Database functions
+
+# Функции БД
 def get_user_by_email(email: str):
     conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('SELECT id, username, email, password_hash, created_at FROM users WHERE email = ?', (email,))
     row = cursor.fetchone()
     conn.close()
-    
     if row:
-        return {
-            "id": row[0],
-            "username": row[1],
-            "email": row[2],
-            "password_hash": row[3],
-            "created_at": row[4]
-        }
+        return {"id": row[0], "username": row[1], "email": row[2], "password_hash": row[3], "created_at": row[4]}
     return None
+
 
 def get_user_by_username(username: str):
     conn = sqlite3.connect('users.db', check_same_thread=False)
@@ -181,34 +259,23 @@ def get_user_by_username(username: str):
     cursor.execute('SELECT id, username, email, password_hash, created_at FROM users WHERE username = ?', (username,))
     row = cursor.fetchone()
     conn.close()
-    
     if row:
-        return {
-            "id": row[0],
-            "username": row[1],
-            "email": row[2],
-            "password_hash": row[3],
-            "created_at": row[4]
-        }
+        return {"id": row[0], "username": row[1], "email": row[2], "password_hash": row[3], "created_at": row[4]}
     return None
+
 
 def create_user(username: str, email: str, password_hash: str):
     conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
     try:
-        cursor.execute(
-            'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
-            (username, email, password_hash)
-        )
+        cursor.execute('INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)', (username, email, password_hash))
         conn.commit()
-        user_id = cursor.lastrowid
-    except sqlite3.IntegrityError as e:
-        conn.close()
-        return None
+        return get_user_by_email(email)
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="User with this email or username already exists")
     finally:
         conn.close()
-    
-    return get_user_by_email(email)
+
 
 def get_all_users():
     conn = sqlite3.connect('users.db', check_same_thread=False)
@@ -216,322 +283,246 @@ def get_all_users():
     cursor.execute('SELECT id, username, email, created_at FROM users')
     rows = cursor.fetchall()
     conn.close()
-    
-    return [
-        {
-            "id": row[0],
-            "username": row[1],
-            "email": row[2],
-            "created_at": row[3]
-        }
-        for row in rows
-    ]
+    return [{"id": r[0], "username": r[1], "email": r[2], "created_at": r[3]} for r in rows]
 
-# Инициализация DeepSeek
+
+# Инициализация AI
 deepseek_client = DeepSeekClient()
 
-# API endpoints
+
+# === API ===
+
 @app.get("/", response_model=ResponseModel)
 async def root_path():
     return ResponseModel(
         status="success",
         message="Welcome to authorization system!",
-        data={
-            "features": [
-                "New user registration",
-                "Authorization by email and password",
-                "JWT tokens for access",
-                "Protected routes"
-            ]
-        }
+        data={"features": ["New user registration", "Authorization", "JWT tokens", "Protected routes"]}
     )
+
 
 @app.post("/register", response_model=ResponseModel)
 async def register(user: UserCreate):
-    # Check if user exists
     if get_user_by_email(user.email):
-        raise HTTPException(
-            status_code=400,
-            detail="User with this email already exists"
-        )
-    
+        raise HTTPException(status_code=400, detail="User with this email already exists")
     if get_user_by_username(user.username):
-        raise HTTPException(
-            status_code=400,
-            detail="User with this username already exists"
-        )
-    
-    # Create user
+        raise HTTPException(status_code=400, detail="User with this username already exists")
+
     password_hash = hash_password(user.password)
-    new_user = create_user(
-        user.username,
-        user.email,
-        password_hash
-    )
-    
-    if not new_user:
-        raise HTTPException(
-            status_code=400,
-            detail="Error creating user"
-        )
-    
+    new_user = create_user(user.username, user.email, password_hash)
+
     return ResponseModel(
         status="success",
         message="User successfully registered!",
-        data={
-            "user": {
-                "id": new_user["id"],
-                "username": new_user["username"],
-                "email": new_user["email"]
-            }
-        }
+        data={"user": {"id": new_user["id"], "username": new_user["username"], "email": new_user["email"]}}
     )
+
 
 @app.post("/login", response_model=TokenResponse)
 async def login(login_data: UserLogin):
     user = get_user_by_email(login_data.email)
-    
     if not user or not verify_password(login_data.password, user["password_hash"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
     access_token = create_token({"sub": user["email"]})
-    
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=UserResponse(
-            id=user["id"],
-            username=user["username"],
-            email=user["email"],
-            created_at=user["created_at"]
-        )
+        user=UserResponse(**{k: str(v) for k, v in user.items()})
     )
+
 
 @app.get("/profile", response_model=ResponseModel)
 async def get_profile(user: dict = Depends(get_current_user)):
     return ResponseModel(
         status="success",
         message="Profile data",
-        data={
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"],
-                "created_at": user["created_at"]
-            }
-        }
+        data={"user": {"id": user["id"], "username": user["username"], "email": user["email"], "created_at": user["created_at"]}}
     )
+
 
 @app.get("/users", response_model=ResponseModel)
 async def get_all_users_endpoint():
     users = get_all_users()
-    return ResponseModel(
-        status="success",
-        message=f"Found {len(users)} users",
-        data={"users": users}
-    )
+    return ResponseModel(status="success", message=f"Found {len(users)} users", data={"users": users})
+
 
 @app.get("/check-token", response_model=ResponseModel)
 async def check_token_endpoint(user: dict = Depends(get_current_user)):
     return ResponseModel(
         status="success",
         message="Token is valid",
-        data={
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"]
-            }
-        }
+        data={"user": {"id": user["id"], "username": user["username"], "email": user["email"]}}
     )
 
-@app.post("/chat/send", response_model=ChatResponse)
-async def send_chat_message(
+
+@app.post("/chats/{chat_id}/message", response_model=ChatResponse)
+async def send_message_to_chat(
+    chat_id: int,
     chat_data: ChatMessage,
     user: dict = Depends(get_current_user)
 ):
-    """
-    Отправка сообщения в чат с DeepSeek
-    """
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+
+    cursor.execute('SELECT id FROM chats WHERE id = ? AND user_id = ?', (chat_id, user["id"]))
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Chat not found")
+
     try:
-        # Формируем сообщения для API
-        messages = []
-        
-        # Добавляем системный промпт для бизнес-контекста
-        system_prompt = {
-            "role": "system", 
-            "content": "Ты - экспертный помощник по малому бизнесу. Давай практические, конкретные советы для предпринимателей. Отвечай на русском языке."
-        }
-        messages.append(system_prompt)
-        
-        # Добавляем историю диалога если есть
-        if chat_data.conversation_history:
-            messages.extend(chat_data.conversation_history)
-        
-        # Добавляем текущее сообщение пользователя
-        user_message = {"role": "user", "content": chat_data.message}
-        messages.append(user_message)
-        
-        # Отправляем запрос к DeepSeek
-        response = deepseek_client.chat_completion(messages)
-        
-        if not response:
-            raise HTTPException(
-                status_code=500,
-                detail="Ошибка при получении ответа от AI"
-            )
-        
-        # Обновляем историю диалога
-        updated_history = chat_data.conversation_history or []
-        updated_history.append(user_message)
-        updated_history.append({"role": "assistant", "content": response})
-        
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        cursor.execute('SELECT role, content FROM messages WHERE chat_id = ? ORDER BY created_at', (chat_id,))
+        history = cursor.fetchall()
+        messages.extend([{"role": row[0], "content": row[1]} for row in history])
+        messages.append({"role": "user", "content": chat_data.message})
+
+        response_text = deepseek_client.chat_completion(messages)
+        if not response_text:
+            raise HTTPException(status_code=500, detail="Ошибка генерации ответа")
+
+        cursor.execute('INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)', (chat_id, 'user', chat_data.message))
+        cursor.execute('INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)', (chat_id, 'assistant', response_text))
+        cursor.execute('UPDATE chats SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', (chat_id,))
+        conn.commit()
+
+        if len(history) == 0:
+            first_words = chat_data.message.split()[:5]
+            new_title = " ".join(first_words) + ("..." if len(first_words) == 5 else "")
+            cursor.execute('UPDATE chats SET title = ? WHERE id = ?', (new_title, chat_id))
+            conn.commit()
+
+        conn.close()
+
         return ChatResponse(
             status="success",
-            message="Chat message processed successfully",
-            response=response,
-            conversation_history=updated_history
+            message="Сообщение отправлено",
+            response=response_text,
         )
-        
+
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing chat message: {str(e)}"
-        )
+        conn.rollback()
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Ошибка: {str(e)}")
+
 
 @app.post("/chat/business-advice", response_model=ChatResponse)
 async def get_business_advice(
     advice_request: BusinessAdviceRequest,
     user: dict = Depends(get_current_user)
 ):
-    """
-    Специализированный эндпоинт для бизнес-консультаций
-    """
     try:
-        # Формируем контекстный промпт
         context_parts = []
-        
         if advice_request.business_type:
-            context_parts.append(f"тип бизнеса: {advice_request.business_type}")
+            context_parts.append(f"Тип бизнеса: {advice_request.business_type}")
         if advice_request.budget:
-            context_parts.append(f"бюджет: {advice_request.budget}")
+            context_parts.append(f"Бюджет: {advice_request.budget}")
         if advice_request.experience:
-            context_parts.append(f"опыт: {advice_request.experience}")
-        
-        context = ", ".join(context_parts)
-        
-        prompt = f"""
-        Как эксперт по малому бизнесу, дай практический совет по следующему запросу:
-        
-        Контекст: {context}
-        Вопрос: {advice_request.question}
-        
-        Дай структурированный ответ с конкретными шагами и рекомендациями.
-        """
-        
-        messages = [
-            {
-                "role": "system",
-                "content": "Ты - опытный бизнес-консультант с экспертизой в малом бизнесе. Давай практические, реалистичные советы с четкими шагами."
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-        
+            context_parts.append(f"Опыт: {advice_request.experience}")
+
+        context_str = ". ".join(context_parts)
+        full_prompt = f"Вопрос: {advice_request.question}"
+        if context_parts:
+            full_prompt = f"""
+                        Следуя всем правилам форматирования, ответь на вопрос:
+
+                        Вопрос: {advice_request.question}
+
+                        Контекст: {context_str if context_parts else 'не указан'}
+
+                        НАЧНИ ОТВЕТ С ПЕРВОГО ЛОГИЧЕСКОГО БЛОКА.
+                        """.strip()
+
+            messages = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": full_prompt}
+            ]
+
         response = deepseek_client.chat_completion(messages)
-        
         if not response:
-            raise HTTPException(
-                status_code=500,
-                detail="Ошибка при получении бизнес-совета"
-            )
-        
+            raise HTTPException(status_code=500, detail="Ошибка при получении бизнес-совета")
+
         return ChatResponse(
             status="success",
             message="Business advice generated successfully",
             response=response
         )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error generating business advice: {str(e)}"
-        )
 
-
-# Эндпоинты чата
-@app.post("/chat/quick", response_model=ChatResponse)
-async def quick_chat(
-    chat_data: ChatMessage,
-    user: dict = Depends(get_current_user)
-):
-    """
-    Быстрый чат без сохранения истории
-    """
-    try:
-        response = deepseek_client.quick_chat(chat_data.message)
-        
-        if not response:
-            raise HTTPException(
-                status_code=500,
-                detail="Ошибка при получении ответа от AI"
-            )
-        
-        return ChatResponse(
-            status="success",
-            message="Quick chat message processed",
-            response=response
-        )
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error in quick chat: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error generating business advice: {str(e)}")
+
 
 @app.get("/chat/models")
 async def get_available_models(user: dict = Depends(get_current_user)):
-    """
-    Получение информации о доступных моделях
-    """
     return {
         "status": "success",
         "current_model": "deepseek/deepseek-chat",
-        "features": [
-            "Бизнес-консультации",
-            "Общий чат",
-            "Быстрые ответы"
+        "features": ["Бизнес-консультации", "Общий чат"]
+    }
+
+
+@app.post("/chats/", response_model=ChatResponseModel)
+async def create_chat(request: NewChatRequest, user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    try:
+        cursor.execute('INSERT INTO chats (user_id, title) VALUES (?, ?)', (user["id"], request.title))
+        chat_id = cursor.lastrowid
+        conn.commit()
+        cursor.execute('SELECT id, title, created_at, updated_at FROM chats WHERE id = ?', (chat_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return {"id": row[0], "title": row[1], "created_at": row[2], "updated_at": row[3]}
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        raise HTTPException(status_code=500, detail=f"Error creating chat: {str(e)}")
+
+
+@app.get("/chats/", response_model=List[ChatResponseModel])
+async def get_user_chats(user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, title, created_at, updated_at FROM chats WHERE user_id = ? ORDER BY updated_at DESC', (user["id"],))
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "title": r[1], "created_at": r[2], "updated_at": r[3]} for r in rows]
+
+
+@app.get("/chats/{chat_id}", response_model=ChatDetailResponse)
+async def get_chat_detail(chat_id: int, user: dict = Depends(get_current_user)):
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, title, created_at, updated_at FROM chats WHERE id = ? AND user_id = ?', (chat_id, user["id"]))
+    chat_row = cursor.fetchone()
+    if not chat_row:
+        raise HTTPException(status_code=404, detail="Chat not found")
+
+    cursor.execute('SELECT id, chat_id, role, content, created_at FROM messages WHERE chat_id = ? ORDER BY created_at ASC', (chat_id,))
+    message_rows = cursor.fetchall()
+    conn.close()
+
+    return {
+        "chat": {"id": chat_row[0], "title": chat_row[1], "created_at": chat_row[2], "updated_at": chat_row[3]},
+        "messages": [
+            {"id": m[0], "chat_id": m[1], "role": m[2], "content": m[3], "created_at": m[4]} for m in message_rows
         ]
     }
 
 
 @app.get("/test")
 async def test_endpoint():
-    # Тестируем базовую функциональность и DeepSeek
     test_message = "Привет! Ответь коротко - ты работаешь?"
-    
     try:
-        # Тест DeepSeek
         ai_response = deepseek_client.quick_chat(test_message)
-        ai_status = "working" if ai_response else "not working"
-        
-        return {
-            "status": "success", 
-            "message": "Backend is working!",
-            "ai_status": ai_status,
-            "ai_test_response": ai_response[:100] + "..." if ai_response else None
-        }
-    except Exception as e:
         return {
             "status": "success",
-            "message": "Backend is working but AI test failed",
-            "error": str(e)
+            "message": "Backend is working!",
+            "ai_status": "working" if ai_response else "not working",
+            "ai_test_response": (ai_response[:100] + "...") if ai_response else None
         }
+    except Exception as e:
+        return {"status": "success", "message": "Backend is working but AI test failed", "error": str(e)}
+
 
 if __name__ == "__main__":
     import uvicorn

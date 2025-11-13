@@ -37,19 +37,45 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
+  // === Авторизация ===
   register: (userData) => api.post('/register', userData),
   login: (credentials) => api.post('/login', credentials),
   getProfile: () => api.get('/profile'),
   getUsers: () => api.get('/users'),
   checkToken: () => api.get('/check-token'),
+
+  // === Чаты ===
+  /**
+   * Получить все чаты пользователя
+   */
+  getChats: () => api.get('/chats/'),
+
+  /**
+   * Создать новый чат
+   * @param {Object} data - { title: string }
+   */
+  createChat: (data) => api.post('/chats/', data),
+
+  /**
+   * Получить чат и его сообщения
+   * @param {number} chatId
+   */
+  getChat: (chatId) => api.get(`/chats/${chatId}`),
+
+  /**
+   * Отправить сообщение в чат
+   * @param {number} chatId
+   * @param {string} message
+   */
+  sendMessageToChat: (chatId, message) =>
+    api.post(`/chats/${chatId}/message`, { message }),
+
+  // === Существующие чат-методы (оставляем для совместимости/гостевого режима) ===
   sendChatMessage: (message, history = null) =>
     api.post('/chat/send', { message, conversation_history: history }),
 
   getBusinessAdvice: (data) =>
     api.post('/chat/business-advice', data),
-
-  quickChat: (message) =>
-    api.post('/chat/quick', { message }),
 };
 
 export default api;
