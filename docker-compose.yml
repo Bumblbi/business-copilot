@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # === Backend ===
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=/app/data/users.db
+      - SECRET_KEY=${SECRET_KEY}
+    env_file:
+      - .env
+    depends_on:
+      - db-volume
+    networks:
+      - app-network
+
+  # === Frontend ===
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+    volumes:
+      - ./frontend:/app
+      - ./frontend/dist:/app/dist
+    env_file:
+      - .env
+    environment:
+      - VITE_API_URL=http://localhost:${BACKEND_PORT}
+    networks:
+      - app-network
+
+  # === DB Volume (для SQLite) ===
+  db-volume:
+    image: alpine
+    volumes:
+      - db-data:/app/data
+    command: "tail -f /dev/null"
+
+# === Networks ===
+networks:
+  app-network:
+    driver: bridge
+
+# === Volumes ===
+volumes:
+  db-data:
+    driver: local

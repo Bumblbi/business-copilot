@@ -8,7 +8,7 @@ class DeepSeekClient:
     def __init__(self):
         self.api_key = os.getenv('OPENROUTER_API_KEY')
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.model = "deepseek/deepseek-chat"  # ✅ Рабочая модель
+        self.model = "deepseek/deepseek-chat"
         self.headers = {
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json',

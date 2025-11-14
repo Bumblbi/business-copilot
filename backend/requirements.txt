@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-jose
+passlib
+python-multipart
+pydantic
+pydantic[email]
+httpx
+PyJWT
+requests
+python-dotenv
