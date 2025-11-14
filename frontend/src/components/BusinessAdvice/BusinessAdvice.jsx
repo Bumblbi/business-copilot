@@ -1,4 +1,4 @@
-// frontend/src/components/BusinessAdvice/BusinessAdvice.jsx
+// BusinessAdvice.jsx
 import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { authAPI } from '../../services/api';
@@ -49,23 +49,23 @@ const BusinessAdvice = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-red-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Заголовок */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-500 rounded-2xl mx-auto mb-4 flex items-center justify-center">
+          <div className="w-16 h-16 bg-red-600 rounded-2xl mx-auto mb-4 flex items-center justify-center">
             <span className="text-white font-bold text-xl">💡</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800">Бизнес-совет</h1>
-          <p className="text-gray-600 mt-2">Получите персонализированную консультацию по вашему бизнесу</p>
+          <h1 className="text-3xl font-bold text-gray-900">Бизнес-совет</h1>
+          <p className="text-gray-700 mt-2">Получите персонализированную консультацию по вашему бизнесу</p>
         </div>
 
         {/* Форма */}
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200 mb-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Задайте свой вопрос</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Задайте свой вопрос</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg">
+              <div className="p-3 bg-red-50 text-red-700 text-sm rounded-lg">
                 {error}
               </div>
             )}
@@ -79,7 +79,7 @@ const BusinessAdvice = () => {
                   value={formData.business_type}
                   onChange={handleChange}
                   placeholder="например: кофейня, маркетинговое агентство"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
 
@@ -91,7 +91,7 @@ const BusinessAdvice = () => {
                   value={formData.budget}
                   onChange={handleChange}
                   placeholder="например: 100 000 руб"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
             </div>
@@ -105,7 +105,7 @@ const BusinessAdvice = () => {
                 placeholder="Как привлечь первых клиентов с низким бюджетом?"
                 rows="3"
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
               />
             </div>
 
@@ -115,7 +115,7 @@ const BusinessAdvice = () => {
                 name="experience"
                 value={formData.experience}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
               >
                 <option value="">Не выбрано</option>
                 <option value="начинающий">Начинающий</option>
@@ -127,7 +127,7 @@ const BusinessAdvice = () => {
             <button
               type="submit"
               disabled={loading}
-              className="bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-medium transition"
+              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg font-medium transition"
             >
               {loading ? 'Генерация...' : 'Получить совет'}
             </button>
@@ -136,27 +136,26 @@ const BusinessAdvice = () => {
 
         {/* История советов */}
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Ваши запросы</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Ваши запросы</h2>
 
           {adviceList.length === 0 ? (
-            <p className="text-gray-500 text-center py-6">Пока нет ни одного запроса. Задайте первый вопрос!</p>
+            <p className="text-gray-700 text-center py-6">Пока нет ни одного запроса. Задайте первый вопрос!</p>
           ) : (
             <div className="space-y-6">
               {adviceList.map((advice) => (
-                <div key={advice.id} className="border-l-4 border-l-blue-500 pl-4 pb-4">
+                <div key={advice.id} className="border-l-4 border-l-red-600 pl-4 pb-4">
                   <div className="flex flex-wrap justify-between">
-                    <h3 className="font-medium text-gray-800">{advice.question}</h3>
-                    <span className="text-sm text-gray-500">{advice.timestamp}</span>
+                    <h3 className="font-medium text-gray-900">{advice.question}</h3>
+                    <span className="text-sm text-gray-700">{advice.timestamp}</span>
                   </div>
 
-                  <div className="mt-2 text-sm text-gray-600 space-y-1">
+                  <div className="mt-2 text-sm text-gray-700 space-y-1">
                     {advice.business_type && <p><strong>Бизнес:</strong> {advice.business_type}</p>}
                     {advice.budget && <p><strong>Бюджет:</strong> {advice.budget}</p>}
                     {advice.experience && <p><strong>Опыт:</strong> {advice.experience}</p>}
                   </div>
 
-                  {/* ✅ Ключевое изменение: whitespace-pre-line */}
-                  <div className="mt-3 p-4 bg-blue-50 text-gray-800 rounded-lg text-sm leading-relaxed whitespace-pre-line">
+                  <div className="mt-3 p-4 bg-red-50 text-gray-900 rounded-lg text-sm leading-relaxed whitespace-pre-line">
                     {advice.response}
                   </div>
                 </div>

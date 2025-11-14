@@ -1,3 +1,4 @@
+// Chat.jsx
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { authAPI } from '../../services/api';
@@ -20,7 +21,6 @@ const Chat = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Загрузка списка чатов
   const fetchChats = async () => {
     if (!isAuthenticated) return;
     try {
@@ -38,7 +38,6 @@ const Chat = () => {
     }
   };
 
-  // Загрузка чата
   const loadChat = async (chatId) => {
     try {
       const res = await authAPI.getChat(chatId);
@@ -56,7 +55,6 @@ const Chat = () => {
     }
   };
 
-  // Создание нового чата
   const createNewChat = async () => {
     try {
       const res = await authAPI.createChat({ title: "Новый чат" });
@@ -153,7 +151,7 @@ const Chat = () => {
             <h2 className="font-semibold text-gray-800">Чаты</h2>
             <button
               onClick={createNewChat}
-              className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg text-sm transition"
+              className="bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg text-sm transition"
               title="Новый чат"
             >
               +
@@ -168,7 +166,7 @@ const Chat = () => {
                   key={chat.id}
                   onClick={() => loadChat(chat.id)}
                   className={`p-3 cursor-pointer border-b border-gray-100 hover:bg-gray-50 ${
-                    currentChat?.id === chat.id ? 'bg-blue-50 border-l-4 border-l-green-500' : ''
+                    currentChat?.id === chat.id ? 'bg-red-50 border-l-4 border-l-red-600' : ''
                   }`}
                 >
                   <div className="font-medium text-sm truncate">{chat.title}</div>
@@ -185,11 +183,11 @@ const Chat = () => {
       {/* Основной чат */}
       <div className="flex-1 flex flex-col">
         {/* Заголовок */}
-        <div className="bg-gradient-to-r from-green-500 to-blue-500 p-4 text-white shadow-md">
+        <div className="bg-gradient-to-r from-red-600 to-red-700 p-4 text-white shadow-md">
           <div className="flex items-center space-x-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden text-white hover:text-green-100"
+              className="lg:hidden text-white hover:text-red-100"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -201,13 +199,13 @@ const Chat = () => {
               </svg>
             </button>
             <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
-              <span className="text-green-500 font-bold">AI</span>
+              <span className="text-red-600 font-bold">AI</span>
             </div>
             <div>
               <h1 className="font-bold">
                 {currentChat ? currentChat.title : 'AI Бизнес-помощник'}
               </h1>
-              <p className="text-green-100 text-sm">
+              <p className="text-red-100 text-sm">
                 {isAuthenticated ? `Чат #${currentChat?.id || '?'}` : 'Гостевой режим'}
               </p>
             </div>
@@ -229,16 +227,15 @@ const Chat = () => {
               <div
                 className={`max-w-xs lg:max-w-md px-4 py-3 rounded-2xl ${
                   message.isUser
-                    ? 'bg-green-500 text-white rounded-br-none'
+                    ? 'bg-red-600 text-white rounded-br-none'
                     : 'bg-white text-gray-800 rounded-bl-none shadow'
                 }`}
               >
-                {/* ✅ Ключевое изменение: whitespace-pre-line */}
                 <div className="text-sm whitespace-pre-line">{message.text}</div>
 
                 <div
                   className={`text-xs mt-1 ${
-                    message.isUser ? 'text-green-100' : 'text-gray-500'
+                    message.isUser ? 'text-red-100' : 'text-gray-500'
                   }`}
                 >
                   {message.timestamp}
@@ -279,7 +276,7 @@ const Chat = () => {
                     ? 'Введите сообщение...'
                     : 'Гостевой режим: без сохранения истории'
                 }
-                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                className="w-full px-4 py-3 border border-gray-300 rounded-2xl focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
                 rows="2"
                 disabled={loading || (isAuthenticated && !currentChat)}
               />
@@ -287,7 +284,7 @@ const Chat = () => {
             <button
               type="submit"
               disabled={loading || !inputMessage.trim() || (isAuthenticated && !currentChat)}
-              className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-2xl font-medium transition disabled:opacity-50 flex items-center space-x-2"
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-medium transition disabled:opacity-50 flex items-center space-x-2"
             >
               <span>Отправить</span>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

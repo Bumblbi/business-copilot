@@ -1,3 +1,4 @@
+// Register.jsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { Link, useNavigate } from 'react-router-dom';
@@ -9,7 +10,6 @@ const Register = () => {
   const { register, error, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  // Если пользователь уже авторизован, перенаправляем на главную
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/');
@@ -27,34 +27,34 @@ const Register = () => {
 
   if (isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-green-700">Перенаправление...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
+          <p className="text-gray-700">Перенаправление...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full">
-        <div className="bg-white rounded-lg shadow-sm border border-green-100 p-8">
+        <div className="bg-white rounded-lg shadow-sm border border-red-100 p-8">
           <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mb-4">
+            <div className="mx-auto w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mb-4">
               <span className="text-white text-2xl font-bold">+</span>
             </div>
-            <h2 className="text-3xl font-bold text-green-700">
+            <h2 className="text-3xl font-bold text-gray-900">
               Регистрация
             </h2>
-            <p className="mt-2 text-green-600">
+            <p className="mt-2 text-gray-700">
               Создайте новый аккаунт
             </p>
           </div>
           
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-green-700 mb-2">
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
                 Имя пользователя
               </label>
               <input
@@ -62,7 +62,7 @@ const Register = () => {
                 name="username"
                 type="text"
                 required
-                className="w-full px-3 py-2 border border-green-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors duration-200"
+                className="w-full px-3 py-2 border border-red-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors duration-200"
                 placeholder="Ваше имя"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -71,7 +71,7 @@ const Register = () => {
             </div>
             
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-green-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email
               </label>
               <input
@@ -80,7 +80,7 @@ const Register = () => {
                 type="email"
                 autoComplete="email"
                 required
-                className="w-full px-3 py-2 border border-green-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors duration-200"
+                className="w-full px-3 py-2 border border-red-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors duration-200"
                 placeholder="your@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -89,7 +89,7 @@ const Register = () => {
             </div>
             
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-green-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Пароль
               </label>
               <input
@@ -98,7 +98,7 @@ const Register = () => {
                 type="password"
                 autoComplete="new-password"
                 required
-                className="w-full px-3 py-2 border border-green-200 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors duration-200"
+                className="w-full px-3 py-2 border border-red-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors duration-200"
                 placeholder="Придумайте пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -120,7 +120,7 @@ const Register = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {loading ? (
                 <span className="flex items-center justify-center">
@@ -133,12 +133,12 @@ const Register = () => {
               ) : 'Зарегистрироваться'}
             </button>
 
-            <div className="text-center pt-4 border-t border-green-100">
-              <p className="text-green-600">
+            <div className="text-center pt-4 border-t border-red-100">
+              <p className="text-gray-700">
                 Уже есть аккаунт?{' '}
                 <Link
                   to="/login"
-                  className="font-medium text-green-500 hover:text-green-600 transition-colors duration-200"
+                  className="font-medium text-red-600 hover:text-red-700 transition-colors duration-200"
                 >
                   Войдите
                 </Link>
