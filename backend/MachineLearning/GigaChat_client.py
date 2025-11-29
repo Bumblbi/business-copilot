@@ -4,21 +4,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class DeepSeekClient:
+class GigaChatClient:
     def __init__(self):
-        self.api_key = os.getenv('OPENROUTER_API_KEY')
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.model = "deepseek/deepseek-chat"
+        self.api_key = os.getenv('GIGACHAT_API_KEY')
+        self.api_url = "https://foundation-models.api.cloud.ru/v1"
+        self.model = "GigaChat/GigaChat-2-Max"
         self.headers = {
             'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/your-username/business-copilot',
-            'X-Title': 'Business Copilot'
+            'Content-Type': 'application/json'
         }
     
     def chat_completion(self, messages, **kwargs):
         """
-        Основной метод для отправки запроса к DeepSeek
+        Основной метод для отправки запроса к GigaChat
         """
         data = {
             "model": self.model,
@@ -40,11 +38,11 @@ class DeepSeekClient:
                 result = response.json()
                 return result['choices'][0]['message']['content']
             else:
-                print(f"Ошибка API: {response.status_code} - {response.text}")
+                print(f"Ошибка API GigaChat: {response.status_code} - {response.text}")
                 return None
                 
         except Exception as e:
-            print(f"Ошибка запроса: {e}")
+            print(f"Ошибка запроса к GigaChat: {e}")
             return None
     
     def quick_chat(self, message):
