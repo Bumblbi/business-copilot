@@ -157,13 +157,94 @@ def init_chat_db():
     conn.commit()
     conn.close()
 
+# === ОПЕРАЦИОННЫЙ ДИРЕКТОР: ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ===
+def init_operational_director_db():
+    """
+    Создаёт дополнительные таблицы для 'операционного директора',
+    если их ещё нет в базе users.db.
+    """
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    # Таблица компаний
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            industry TEXT,
+            size TEXT,
+            description TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+
+    # Таблица проектов
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS projects (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT,
+            status TEXT DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id)
+        );
+        """
+    )
+
+    # Таблица задач
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            project_id INTEGER,
+            title TEXT NOT NULL,
+            description TEXT,
+            priority TEXT DEFAULT 'medium',
+            status TEXT DEFAULT 'todo',
+            due_date TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id),
+            FOREIGN KEY (project_id) REFERENCES projects(id)
+        );
+        """
+    )
+
+    # Таблица недельных планов
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS weekly_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            week_start_date TEXT NOT NULL,
+            goals TEXT,
+            tasks_summary TEXT,
+            risks TEXT,
+            opportunities TEXT,
+            raw_plan_json TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id)
+        );
+        """
+    )
+
+    conn.commit()
+    conn.close()
+
+####################################################################################
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     init_chat_db()
+    init_operational_director_db()
     yield
-
 
 app = FastAPI(
     title="Authorization System",
@@ -181,7 +262,6 @@ app.add_middleware(
 )
 
 security = HTTPBearer()
-
 
 # Модели
 class UserCreate(BaseModel):
@@ -256,6 +336,42 @@ class ChatDetailResponse(BaseModel):
 class NewChatRequest(BaseModel):
     title: str = "Новый чат"
 
+# === ОПЕРАЦИОННЫЙ ДИРЕКТОР: Pydantic-модели ===
+
+class ProjectInput(BaseModel):
+    name: str
+    description: str | None = None
+    status: str | None = "active"
+
+
+class TaskInput(BaseModel):
+    title: str
+    description: str | None = None
+    priority: str | None = "medium"
+    status: str | None = "todo"
+    due_date: str | None = None
+    project_id: int | None = None  # можно не указывать, если задача общая
+
+
+class CompanySetupRequest(BaseModel):
+    name: str
+    industry: str | None = None
+    size: str | None = None  # например: micro / small / medium / large
+    description: str | None = None
+    projects: list[ProjectInput] | None = None
+    tasks: list[TaskInput] | None = None
+
+
+class WeeklyPlanResponse(BaseModel):
+    company_id: int
+    week_start_date: str
+    goals: str | None = None
+    tasks_summary: str | None = None
+    risks: str | None = None
+    opportunities: str | None = None
+    raw_plan_json: dict | None = None
+
+####################################################################################
 
 # Хеширование паролей
 def hash_password(password: str) -> str:
@@ -587,3 +703,95 @@ async def test_endpoint():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend:app", host="localhost", port=3000, reload=True)
+
+
+# === ОПЕРАЦИОННЫЙ ДИРЕКТОР: СОЗДАНИЕ/НАСТРОЙКА КОМПАНИИ ===
+
+@app.post("/company/setup")
+async def setup_company(request: CompanySetupRequest):
+    """
+    Временная версия без привязки к пользователю.
+    user_id жестко ставим в 1 или другом тестовом значении.
+    """
+    user_id = 1  # TODO: заменить на реального пользователя, когда будет доступен
+    """
+    Создаёт или обновляет компанию для текущего пользователя,
+    а также (опционально) начальные проекты и задачи.
+    """
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+
+    # Проверяем, есть ли уже компания с таким именем у пользователя
+    cursor.execute(
+        "SELECT id FROM companies WHERE user_id = ? AND name = ?",
+        (user_id, request.name),
+    )
+    row = cursor.fetchone()
+
+    if row:
+        company_id = row[0]
+        # Обновляем базовую информацию о компании
+        cursor.execute(
+            """
+            UPDATE companies
+            SET industry = ?, size = ?, description = ?
+            WHERE id = ?
+            """,
+            (request.industry, request.size, request.description, company_id),
+        )
+    else:
+        # Создаём новую компанию
+        cursor.execute(
+            """
+            INSERT INTO companies (user_id, name, industry, size, description)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, request.name, request.industry, request.size, request.description),
+        )
+        company_id = cursor.lastrowid
+
+    # Создаём проекты (если переданы)
+    project_name_to_id: dict[str, int] = {}
+
+    if request.projects:
+        for project in request.projects:
+            cursor.execute(
+                """
+                INSERT INTO projects (company_id, name, description, status)
+                VALUES (?, ?, ?, ?)
+                """,
+                (company_id, project.name, project.description, project.status or "active"),
+            )
+            project_id = cursor.lastrowid
+            project_name_to_id[project.name] = project_id
+
+    # Создаём задачи (если переданы)
+    if request.tasks:
+        for task in request.tasks:
+            # Если в TaskInput указан project_id — используем его,
+            # иначе можно попытаться матчить по имени проекта (если хочешь — доработаем позже).
+            cursor.execute(
+                """
+                INSERT INTO tasks (company_id, project_id, title, description, priority, status, due_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    company_id,
+                    task.project_id,
+                    task.title,
+                    task.description,
+                    task.priority or "medium",
+                    task.status or "todo",
+                    task.due_date,
+                ),
+            )
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "company_id": company_id,
+        "message": "Компания и начальные данные успешно сохранены.",
+    }
+
+####################################################################################
