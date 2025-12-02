@@ -118,10 +118,6 @@ const Profile = () => {
           {profile?.data?.user && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">ID</label>
-                <p className="mt-1 text-sm text-gray-900">{profile.data.user.id}</p>
-              </div>
-              <div>
                 <label className="block text-sm font-medium text-gray-700">Имя пользователя</label>
                 <p className="mt-1 text-sm text-gray-900">{profile.data.user.username}</p>
               </div>

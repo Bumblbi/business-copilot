@@ -1,6 +1,8 @@
 import os
-import requests
+import json
+from datetime import date
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -9,16 +11,19 @@ class GigaChatClient:
         self.api_key = os.getenv('GIGACHAT_API_KEY')
         self.api_url = "https://foundation-models.api.cloud.ru/v1"
         self.model = "GigaChat/GigaChat-2-Max"
-        self.headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        
+        # Инициализируем клиент OpenAI с кастомизированными параметрами
+        self.client = OpenAI(
+            base_url=self.api_url,
+            api_key=self.api_key
+        )
     
     def chat_completion(self, messages, **kwargs):
         """
         Основной метод для отправки запроса к GigaChat
         """
-        data = {
+        # Формируем параметры запроса
+        request_params = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.7,
@@ -27,19 +32,11 @@ class GigaChatClient:
         }
         
         try:
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=data,
-                timeout=60
-            )
+            # Отправляем запрос через клиент OpenAI
+            response = self.client.chat.completions.create(**request_params)
             
-            if response.status_code == 200:
-                result = response.json()
-                return result['choices'][0]['message']['content']
-            else:
-                print(f"Ошибка API GigaChat: {response.status_code} - {response.text}")
-                return None
+            # Извлекаем текст ответа
+            return response.choices[0].message.content
                 
         except Exception as e:
             print(f"Ошибка запроса к GigaChat: {e}")
@@ -76,9 +73,6 @@ class GigaChatClient:
             "raw_plan": {...}  # полный JSON от модели
         }
         """
-        import json
-        from datetime import date
-
         # Собираем текстовый промпт из структурированного контекста
         company = business_context.get("company", {})
         projects = business_context.get("projects", [])
@@ -136,16 +130,18 @@ class GigaChatClient:
             "Не добавляй никакого текста вне JSON."
         )
 
-        # Вызываем уже существующий метод чат-комплишена
-        response_text = self.chat_completion(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-        )
+        # Вызываем метод чат-комплишена через OpenAI клиент
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        response_text = self.chat_completion(messages)
 
         # Пытаемся распарсить ответ как JSON
         try:
-            plan_json = json.loads(response_text)
-        except json.JSONDecodeError:
+            plan_json = json.loads(response_text) if response_text else {}
+        except (json.JSONDecodeError, TypeError):
             # Если модель вернула что-то невалидное — оборачиваем в безопасный вид
             plan_json = {
                 "week_start_date": str(date.today()),
