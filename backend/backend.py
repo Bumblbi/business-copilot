@@ -806,3 +806,186 @@ async def setup_company(request: CompanySetupRequest):
     }
 
 ####################################################################################
+
+# === ОПЕРАЦИОННЫЙ ДИРЕКТОР: ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ===
+
+def get_company_context(company_id: int) -> dict:
+    """
+    Достаём из БД описание компании, проекты и задачи,
+    чтобы передать это в модель для генерации недельного плана.
+    """
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+
+    # Компания
+    cursor.execute(
+        "SELECT id, user_id, name, industry, size, description FROM companies WHERE id = ?",
+        (company_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    company = {
+        "id": row[0],
+        "user_id": row[1],
+        "name": row[2],
+        "industry": row[3],
+        "size": row[4],
+        "description": row[5],
+    }
+
+    # Проекты
+    cursor.execute(
+        "SELECT id, name, description, status FROM projects WHERE company_id = ?",
+        (company_id,),
+    )
+    projects_rows = cursor.fetchall()
+    projects = [
+        {
+            "id": r[0],
+            "name": r[1],
+            "description": r[2],
+            "status": r[3],
+        }
+        for r in projects_rows
+    ]
+
+    # Задачи
+    cursor.execute(
+        """
+        SELECT id, project_id, title, description, priority, status, due_date
+        FROM tasks
+        WHERE company_id = ?
+        """,
+        (company_id,),
+    )
+    tasks_rows = cursor.fetchall()
+    tasks = [
+        {
+            "id": r[0],
+            "project_id": r[1],
+            "title": r[2],
+            "description": r[3],
+            "priority": r[4],
+            "status": r[5],
+            "due_date": r[6],
+        }
+        for r in tasks_rows
+    ]
+
+    conn.close()
+    return {
+        "company": company,
+        "projects": projects,
+        "tasks": tasks,
+    }
+
+# === ОПЕРАЦИОННЫЙ ДИРЕКТОР: ГЕНЕРАЦИЯ НЕДЕЛЬНОГО ПЛАНА ===
+
+@app.post("/company/{company_id}/weekly-plan", response_model=WeeklyPlanResponse)
+async def generate_weekly_plan_endpoint(company_id: int):
+    """
+    Генерирует недельный план для компании через GigaChat
+    и сохраняет его в таблицу weekly_plans.
+    """
+    import json
+    from datetime import date
+
+    # 1. Достаём контекст компании из БД
+    business_context = get_company_context(company_id)
+
+    # 2. Вызываем GigaChat для генерации плана
+    plan = gigachat_client.generate_weekly_plan(business_context)
+
+    week_start_date = plan.get("week_start_date", str(date.today()))
+    goals = plan.get("goals")
+    tasks_summary = plan.get("tasks_summary")
+    risks = plan.get("risks")
+    opportunities = plan.get("opportunities")
+    raw_plan = plan.get("raw_plan", plan)
+
+    # 3. Сохраняем план в БД
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO weekly_plans (
+            company_id,
+            week_start_date,
+            goals,
+            tasks_summary,
+            risks,
+            opportunities,
+            raw_plan_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            company_id,
+            week_start_date,
+            goals,
+            tasks_summary,
+            risks,
+            opportunities,
+            json.dumps(raw_plan, ensure_ascii=False),
+        ),
+    )
+    plan_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+
+    return WeeklyPlanResponse(
+        company_id=company_id,
+        week_start_date=week_start_date,
+        goals=goals,
+        tasks_summary=tasks_summary,
+        risks=risks,
+        opportunities=opportunities,
+        raw_plan_json=raw_plan,
+    )
+
+# === ОПЕРАЦИОННЫЙ ДИРЕКТОР: ПОЛУЧЕНИЕ ТЕКУЩЕГО НЕДЕЛЬНОГО ПЛАНА ===
+
+@app.get("/company/{company_id}/weekly-plan/current", response_model=WeeklyPlanResponse)
+async def get_current_weekly_plan(company_id: int):
+    """
+    Возвращает последний сохранённый недельный план для компании.
+    """
+    import json
+
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT week_start_date, goals, tasks_summary, risks, opportunities, raw_plan_json
+        FROM weekly_plans
+        WHERE company_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (company_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Weekly plan not found")
+
+    week_start_date, goals, tasks_summary, risks, opportunities, raw_plan_json = row
+
+    try:
+        raw_json = json.loads(raw_plan_json) if raw_plan_json else None
+    except json.JSONDecodeError:
+        raw_json = None
+
+    return WeeklyPlanResponse(
+        company_id=company_id,
+        week_start_date=week_start_date,
+        goals=goals,
+        tasks_summary=tasks_summary,
+        risks=risks,
+        opportunities=opportunities,
+        raw_plan_json=raw_json,
+    )
