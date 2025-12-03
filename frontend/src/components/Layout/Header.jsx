@@ -1,4 +1,3 @@
-// Header.jsx
 import { useAuth } from '../../hooks/useAuth';
 import { Link } from 'react-router-dom';
 
@@ -55,6 +54,14 @@ const Header = () => {
                   className="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
                 >
                   Советы
+                </Link>
+
+                {/* Ссылка: Операционный директор */}
+                <Link
+                  to="/operational"
+                  className="text-gray-700 hover:text-red-600 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200"
+                >
+                  Управление
                 </Link>
 
                 {/* Ссылка на профиль */}

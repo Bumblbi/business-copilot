@@ -1,13 +1,11 @@
-// Register.jsx
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../hooks/useAuth';
 import { Link, useNavigate } from 'react-router-dom';
 
-const Register = () => {
-  const [username, setUsername] = useState('');
+const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { register, error, loading, isAuthenticated } = useAuth();
+  const { login, error, loading, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,7 +16,7 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const result = await register(username, email, password);
+    const result = await login(email, password);
     
     if (result.success) {
       navigate('/');
@@ -30,7 +28,7 @@ const Register = () => {
       <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto mb-4"></div>
-          <p className="text-gray-700">Перенаправление...</p>
+          <p className="text-gray-700">Перенаправление на главную...</p>
         </div>
       </div>
     );
@@ -42,34 +40,17 @@ const Register = () => {
         <div className="bg-white rounded-lg shadow-sm border border-red-100 p-8">
           <div className="text-center mb-8">
             <div className="mx-auto w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mb-4">
-              <span className="text-white text-2xl font-bold">+</span>
+              <span className="text-white text-2xl font-bold">→</span>
             </div>
             <h2 className="text-3xl font-bold text-gray-900">
-              Регистрация
+              Вход в систему
             </h2>
             <p className="mt-2 text-gray-700">
-              Создайте новый аккаунт
+              Войдите в свой аккаунт
             </p>
           </div>
           
           <form className="space-y-6" onSubmit={handleSubmit}>
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                Имя пользователя
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                required
-                className="w-full px-3 py-2 border border-red-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors duration-200"
-                placeholder="Ваше имя"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-            
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
                 Email
@@ -96,10 +77,10 @@ const Register = () => {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete="new-password"
+                autoComplete="current-password"
                 required
                 className="w-full px-3 py-2 border border-red-200 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-colors duration-200"
-                placeholder="Придумайте пароль"
+                placeholder="Ваш пароль"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
@@ -128,19 +109,19 @@ const Register = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Регистрация...
+                  Вход...
                 </span>
-              ) : 'Зарегистрироваться'}
+              ) : 'Войти'}
             </button>
 
             <div className="text-center pt-4 border-t border-red-100">
               <p className="text-gray-700">
-                Уже есть аккаунт?{' '}
+                Нет аккаунта?{' '}
                 <Link
-                  to="/login"
+                  to="/register"
                   className="font-medium text-red-600 hover:text-red-700 transition-colors duration-200"
                 >
-                  Войдите
+                  Зарегистрируйтесь
                 </Link>
               </p>
             </div>
@@ -151,4 +132,4 @@ const Register = () => {
   );
 };
 
-export default Register;
+export default Login;

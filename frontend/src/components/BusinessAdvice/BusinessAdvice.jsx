@@ -1,4 +1,3 @@
-// BusinessAdvice.jsx
 import { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { authAPI } from '../../services/api';

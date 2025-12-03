@@ -45,37 +45,33 @@ export const authAPI = {
   checkToken: () => api.get('/check-token'),
 
   // === Чаты ===
-  /**
-   * Получить все чаты пользователя
-   */
   getChats: () => api.get('/chats/'),
-
-  /**
-   * Создать новый чат
-   * @param {Object} data - { title: string }
-   */
   createChat: (data) => api.post('/chats/', data),
-
-  /**
-   * Получить чат и его сообщения
-   * @param {number} chatId
-   */
   getChat: (chatId) => api.get(`/chats/${chatId}`),
-
-  /**
-   * Отправить сообщение в чат
-   * @param {number} chatId
-   * @param {string} message
-   */
   sendMessageToChat: (chatId, message) =>
     api.post(`/chats/${chatId}/message`, { message }),
 
-  // === Существующие чат-методы (оставляем для совместимости/гостевого режима) ===
+  // === Существующие чат-методы ===
   sendChatMessage: (message, history = null) =>
-    api.post('/chat/send', { message, conversation_history: history }),
+    api.post('/chat', { message, conversation_history: history }), // Изменил с /chat/send на /chat
 
   getBusinessAdvice: (data) =>
     api.post('/chat/business-advice', data),
+
+  // === Операционный директор ===
+  setupCompany: (data) => api.post('/company/setup', data),
+  generateWeeklyPlan: (companyId) => api.post(`/company/${companyId}/weekly-plan`),
+  getCurrentWeeklyPlan: (companyId) => api.get(`/company/${companyId}/weekly-plan/current`),
+  getCompanies: () => api.get('/company'),
+  getWeeklyPlans: (companyId) => api.get(`/company/${companyId}/weekly-plans`),
+  getCompanyProjects: (companyId) => api.get(`/company/${companyId}/projects`),
+  getCompanyTasks: (companyId) => api.get(`/company/${companyId}/tasks`),
+  createProject: (companyId, data) => api.post(`/company/${companyId}/projects`, data),
+  createTask: (companyId, data) => api.post(`/company/${companyId}/tasks`, data),
+  
+  // === Тестовые эндпоинты ===
+  testEndpoint: () => api.get('/test'),
+  getChatModels: () => api.get('/chat/models'),
 };
 
 export default api;
