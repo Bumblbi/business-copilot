@@ -255,8 +255,46 @@ async def lifespan(app: FastAPI):
     init_db()
     init_chat_db()
     init_operational_director_db()
+    
+    # Дополнительная проверка и создание таблиц при старте
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    
+    # Проверяем существование таблиц и создаём если их нет
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS companies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            industry TEXT,
+            size TEXT,
+            description TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS weekly_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id INTEGER NOT NULL,
+            week_start_date TEXT NOT NULL,
+            goals TEXT,
+            tasks_summary TEXT,
+            risks TEXT,
+            opportunities TEXT,
+            raw_plan_json TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+        )
+    """)
+    
+    conn.commit()
+    conn.close()
+    
+    print("Database initialized successfully")
     yield
 
+    
 app = FastAPI(
     title="Authorization System",
     version="1.0.0",
@@ -695,41 +733,17 @@ async def get_chat_detail(chat_id: int, user: dict = Depends(get_current_user)):
         ]
     }
 
-
-@app.get("/test")
-async def test_endpoint():
-    test_message = "Привет! Ответь коротко - ты работаешь?"
-    try:
-        ai_response = gigachat_client.quick_chat(test_message)(test_message)
-        return {
-            "status": "success",
-            "message": "Backend is working!",
-            "ai_status": "working" if ai_response else "not working",
-            "ai_test_response": (ai_response[:100] + "...") if ai_response else None
-        }
-    except Exception as e:
-        return {"status": "success", "message": "Backend is working but AI test failed", "error": str(e)}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("backend:app", host="localhost", port=3000, reload=True)
-
-
 # === ОПЕРАЦИОННЫЙ ДИРЕКТОР: СОЗДАНИЕ/НАСТРОЙКА КОМПАНИИ ===
 
-@app.post("/company/setup")
-async def setup_company(request: CompanySetupRequest):
-    """
-    Временная версия без привязки к пользователю.
-    user_id жестко ставим в 1 или другом тестовом значении.
-    """
-    user_id = 1  # TODO: заменить на реального пользователя, когда будет доступен
+@app.post("/company/setup", response_model=ResponseModel)
+async def setup_company(request: CompanySetupRequest, user: dict = Depends(get_current_user)):
     """
     Создаёт или обновляет компанию для текущего пользователя,
     а также (опционально) начальные проекты и задачи.
     """
-    conn = sqlite3.connect('users.db')
+    user_id = user["id"]
+    
+    conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
 
     # Проверяем, есть ли уже компания с таким именем у пользователя
@@ -762,7 +776,7 @@ async def setup_company(request: CompanySetupRequest):
         company_id = cursor.lastrowid
 
     # Создаём проекты (если переданы)
-    project_name_to_id: dict[str, int] = {}
+    project_name_to_id = {}
 
     if request.projects:
         for project in request.projects:
@@ -779,8 +793,9 @@ async def setup_company(request: CompanySetupRequest):
     # Создаём задачи (если переданы)
     if request.tasks:
         for task in request.tasks:
-            # Если в TaskInput указан project_id — используем его,
-            # иначе можно попытаться матчить по имени проекта (если хочешь — доработаем позже).
+            # Определяем project_id для задачи
+            project_id = task.project_id
+            
             cursor.execute(
                 """
                 INSERT INTO tasks (company_id, project_id, title, description, priority, status, due_date)
@@ -788,7 +803,7 @@ async def setup_company(request: CompanySetupRequest):
                 """,
                 (
                     company_id,
-                    task.project_id,
+                    project_id,
                     task.title,
                     task.description,
                     task.priority or "medium",
@@ -800,10 +815,11 @@ async def setup_company(request: CompanySetupRequest):
     conn.commit()
     conn.close()
 
-    return {
-        "company_id": company_id,
-        "message": "Компания и начальные данные успешно сохранены.",
-    }
+    return ResponseModel(
+        status="success",
+        message="Компания и начальные данные успешно сохранены.",
+        data={"company_id": company_id}
+    )
 
 ####################################################################################
 
@@ -884,14 +900,27 @@ def get_company_context(company_id: int) -> dict:
 
 # === ОПЕРАЦИОННЫЙ ДИРЕКТОР: ГЕНЕРАЦИЯ НЕДЕЛЬНОГО ПЛАНА ===
 
-@app.post("/company/{company_id}/weekly-plan", response_model=WeeklyPlanResponse)
-async def generate_weekly_plan_endpoint(company_id: int):
+@app.post("/company/{company_id}/weekly-plan", response_model=ResponseModel)
+async def generate_weekly_plan_endpoint(company_id: int, user: dict = Depends(get_current_user)):
     """
     Генерирует недельный план для компании через GigaChat
     и сохраняет его в таблицу weekly_plans.
     """
     import json
     from datetime import date
+
+    # Проверяем, что компания принадлежит пользователю
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM companies WHERE id = ? AND user_id = ?",
+        (company_id, user["id"])
+    )
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Company not found")
+    conn.close()
 
     # 1. Достаём контекст компании из БД
     business_context = get_company_context(company_id)
@@ -936,27 +965,41 @@ async def generate_weekly_plan_endpoint(company_id: int):
     conn.commit()
     conn.close()
 
-    return WeeklyPlanResponse(
-        company_id=company_id,
-        week_start_date=week_start_date,
-        goals=goals,
-        tasks_summary=tasks_summary,
-        risks=risks,
-        opportunities=opportunities,
-        raw_plan_json=raw_plan,
+    return ResponseModel(
+        status="success",
+        message="Недельный план успешно сгенерирован и сохранён.",
+        data={
+            "plan_id": plan_id,
+            "company_id": company_id,
+            "week_start_date": week_start_date,
+            "goals": goals,
+            "tasks_summary": tasks_summary,
+            "risks": risks,
+            "opportunities": opportunities
+        }
     )
 
 # === ОПЕРАЦИОННЫЙ ДИРЕКТОР: ПОЛУЧЕНИЕ ТЕКУЩЕГО НЕДЕЛЬНОГО ПЛАНА ===
 
-@app.get("/company/{company_id}/weekly-plan/current", response_model=WeeklyPlanResponse)
-async def get_current_weekly_plan(company_id: int):
+@app.get("/company/{company_id}/weekly-plan/current", response_model=ResponseModel)
+async def get_current_weekly_plan(company_id: int, user: dict = Depends(get_current_user)):
     """
     Возвращает последний сохранённый недельный план для компании.
     """
     import json
 
+    # Проверяем, что компания принадлежит пользователю
     conn = sqlite3.connect('users.db', check_same_thread=False)
     cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM companies WHERE id = ? AND user_id = ?",
+        (company_id, user["id"])
+    )
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Company not found")
+
     cursor.execute(
         """
         SELECT week_start_date, goals, tasks_summary, risks, opportunities, raw_plan_json
@@ -971,7 +1014,11 @@ async def get_current_weekly_plan(company_id: int):
     conn.close()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Weekly plan not found")
+        return ResponseModel(
+            status="success",
+            message="План не найден",
+            data={"plan": None}
+        )
 
     week_start_date, goals, tasks_summary, risks, opportunities, raw_plan_json = row
 
@@ -980,12 +1027,214 @@ async def get_current_weekly_plan(company_id: int):
     except json.JSONDecodeError:
         raw_json = None
 
-    return WeeklyPlanResponse(
-        company_id=company_id,
-        week_start_date=week_start_date,
-        goals=goals,
-        tasks_summary=tasks_summary,
-        risks=risks,
-        opportunities=opportunities,
-        raw_plan_json=raw_json,
+    return ResponseModel(
+        status="success",
+        message="Текущий недельный план найден",
+        data={
+            "company_id": company_id,
+            "week_start_date": week_start_date,
+            "goals": goals,
+            "tasks_summary": tasks_summary,
+            "risks": risks,
+            "opportunities": opportunities,
+            "raw_plan_json": raw_json,
+        }
     )
+
+@app.get("/company", response_model=ResponseModel)
+async def get_user_companies(user: dict = Depends(get_current_user)):
+    """
+    Возвращает список всех компаний пользователя.
+    """
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        """
+        SELECT id, name, industry, size, description, created_at 
+        FROM companies 
+        WHERE user_id = ? 
+        ORDER BY created_at DESC
+        """,
+        (user["id"],)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    
+    companies = []
+    for row in rows:
+        companies.append({
+            "id": row[0],
+            "name": row[1],
+            "industry": row[2],
+            "size": row[3],
+            "description": row[4],
+            "created_at": row[5]
+        })
+    
+    return ResponseModel(
+        status="success",
+        message=f"Found {len(companies)} companies",
+        data={"companies": companies}
+    )
+
+
+@app.get("/company/{company_id}/weekly-plans", response_model=ResponseModel)
+async def get_weekly_plans_history(company_id: int, user: dict = Depends(get_current_user)):
+    """
+    Возвращает историю всех недельных планов для компании.
+    """
+    # Проверяем, что компания принадлежит пользователю
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM companies WHERE id = ? AND user_id = ?",
+        (company_id, user["id"])
+    )
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    cursor.execute(
+        """
+        SELECT week_start_date, goals, tasks_summary, risks, opportunities, created_at
+        FROM weekly_plans 
+        WHERE company_id = ? 
+        ORDER BY created_at DESC
+        """,
+        (company_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    
+    plans = []
+    for row in rows:
+        plans.append({
+            "week_start_date": row[0],
+            "goals": row[1],
+            "tasks_summary": row[2],
+            "risks": row[3],
+            "opportunities": row[4],
+            "created_at": row[5]
+        })
+    
+    return ResponseModel(
+        status="success",
+        message=f"Found {len(plans)} weekly plans",
+        data={"plans": plans}
+    )
+
+
+@app.get("/company/{company_id}/projects", response_model=ResponseModel)
+async def get_company_projects(company_id: int, user: dict = Depends(get_current_user)):
+    """
+    Возвращает проекты компании.
+    """
+    # Проверяем, что компания принадлежит пользователю
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM companies WHERE id = ? AND user_id = ?",
+        (company_id, user["id"])
+    )
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    cursor.execute(
+        """
+        SELECT id, name, description, status, created_at
+        FROM projects 
+        WHERE company_id = ? 
+        ORDER BY created_at DESC
+        """,
+        (company_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    
+    projects = []
+    for row in rows:
+        projects.append({
+            "id": row[0],
+            "name": row[1],
+            "description": row[2],
+            "status": row[3],
+            "created_at": row[4]
+        })
+    
+    return ResponseModel(
+        status="success",
+        message=f"Found {len(projects)} projects",
+        data={"projects": projects}
+    )
+
+
+@app.get("/company/{company_id}/tasks", response_model=ResponseModel)
+async def get_company_tasks(company_id: int, user: dict = Depends(get_current_user)):
+    """
+    Возвращает задачи компании.
+    """
+    # Проверяем, что компания принадлежит пользователю
+    conn = sqlite3.connect('users.db', check_same_thread=False)
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        "SELECT id FROM companies WHERE id = ? AND user_id = ?",
+        (company_id, user["id"])
+    )
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Company not found")
+    
+    cursor.execute(
+        """
+        SELECT id, title, description, priority, status, due_date, project_id, created_at
+        FROM tasks 
+        WHERE company_id = ? 
+        ORDER BY created_at DESC
+        """,
+        (company_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    
+    tasks = []
+    for row in rows:
+        tasks.append({
+            "id": row[0],
+            "title": row[1],
+            "description": row[2],
+            "priority": row[3],
+            "status": row[4],
+            "due_date": row[5],
+            "project_id": row[6],
+            "created_at": row[7]
+        })
+    
+    return ResponseModel(
+        status="success",
+        message=f"Found {len(tasks)} tasks",
+        data={"tasks": tasks}
+    )
+
+@app.get("/test")
+async def test_endpoint():
+    test_message = "Привет! Ответь коротко - ты работаешь?"
+    try:
+        ai_response = gigachat_client.quick_chat(test_message)(test_message)
+        return {
+            "status": "success",
+            "message": "Backend is working!",
+            "ai_status": "working" if ai_response else "not working",
+            "ai_test_response": (ai_response[:100] + "...") if ai_response else None
+        }
+    except Exception as e:
+        return {"status": "success", "message": "Backend is working but AI test failed", "error": str(e)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("backend:app", host="localhost", port=3000, reload=True)

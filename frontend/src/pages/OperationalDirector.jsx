@@ -30,25 +30,34 @@ const OperationalDirector = () => {
   const fetchCompanies = async () => {
     try {
       const response = await authAPI.getCompanies();
-      setCompanies(response.data.companies || []);
+      console.log('Companies response:', response.data); // Для отладки
+      setCompanies(response.data?.companies || []);
     } catch (err) {
       console.error('Ошибка загрузки компаний:', err);
+      setError('Ошибка загрузки компаний');
       setCompanies([]);
     }
   };
 
   const fetchWeeklyPlans = async (companyId) => {
     try {
-      const response = await authAPI.getCurrentWeeklyPlan(companyId);
-      if (response.data) {
-        setCurrentPlan(response.data);
+      // Получаем текущий план
+      const currentResponse = await authAPI.getCurrentWeeklyPlan(companyId);
+      console.log('Current plan response:', currentResponse.data); // Для отладки
+      
+      if (currentResponse.data?.plan) {
+        setCurrentPlan(currentResponse.data.plan);
+      } else {
+        setCurrentPlan(null);
       }
       
-      // Получаем историю планов (нужно добавить эндпоинт в backend)
+      // Получаем историю планов
       try {
         const plansResponse = await authAPI.getWeeklyPlans(companyId);
+        console.log('Plans history response:', plansResponse.data); // Для отладки
         setWeeklyPlans(plansResponse.data?.plans || []);
-      } catch {
+      } catch (historyErr) {
+        console.error('Ошибка загрузки истории планов:', historyErr);
         setWeeklyPlans([]);
       }
     } catch (err) {
@@ -112,78 +121,78 @@ const OperationalDirector = () => {
   };
 
   const handleCreateCompany = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
+      e.preventDefault();
+      setLoading(true);
+      setError('');
+      setSuccess('');
 
-    try {
-      // Фильтруем пустые проекты и задачи
-      const filteredProjects = companyForm.projects
-        .filter(p => p.name.trim() !== '')
-        .map(p => ({
-          name: p.name,
-          description: p.description || '',
-          status: p.status || 'active'
-        }));
+      try {
+        // Фильтруем пустые проекты и задачи
+        const filteredProjects = companyForm.projects
+          .filter(p => p.name.trim() !== '')
+          .map(p => ({
+            name: p.name,
+            description: p.description || '',
+            status: p.status || 'active'
+          }));
 
-      const filteredTasks = companyForm.tasks
-        .filter(t => t.title.trim() !== '')
-        .map(t => ({
-          title: t.title,
-          description: t.description || '',
-          priority: t.priority || 'medium',
-          status: t.status || 'todo',
-          due_date: null,
-          project_id: null
-        }));
+        const filteredTasks = companyForm.tasks
+          .filter(t => t.title.trim() !== '')
+          .map(t => ({
+            title: t.title,
+            description: t.description || '',
+            priority: t.priority || 'medium',
+            status: t.status || 'todo',
+            due_date: null,
+            project_id: null
+          }));
 
-      const companyData = {
-        name: companyForm.name,
-        industry: companyForm.industry,
-        size: companyForm.size,
-        description: companyForm.description,
-        projects: filteredProjects.length > 0 ? filteredProjects : null,
-        tasks: filteredTasks.length > 0 ? filteredTasks : null
-      };
-
-      const response = await authAPI.setupCompany(companyData);
-      
-      setSuccess('Компания успешно создана!');
-      setCompanyForm({
-        name: '',
-        industry: '',
-        size: 'small',
-        description: '',
-        projects: [{ name: '', description: '', status: 'active' }],
-        tasks: [{ title: '', description: '', priority: 'medium', status: 'todo' }]
-      });
-      
-      fetchCompanies();
-      
-      // Автоматически выбираем созданную компанию
-      if (response.data?.company_id) {
-        const newCompany = {
-          id: response.data.company_id,
-          name: companyData.name,
-          industry: companyData.industry,
-          size: companyData.size,
-          description: companyData.description
+        const companyData = {
+          name: companyForm.name,
+          industry: companyForm.industry,
+          size: companyForm.size,
+          description: companyForm.description,
+          projects: filteredProjects.length > 0 ? filteredProjects : null,
+          tasks: filteredTasks.length > 0 ? filteredTasks : null
         };
-        setCompanies(prev => [newCompany, ...prev]);
-        setSelectedCompany(newCompany);
-        fetchWeeklyPlans(response.data.company_id);
-      }
-      
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Ошибка при создании компании');
-      console.error('Ошибка создания компании:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const handleGeneratePlan = async () => {
+        const response = await authAPI.setupCompany(companyData);
+        
+        setSuccess('Компания успешно создана!');
+        setCompanyForm({
+          name: '',
+          industry: '',
+          size: 'small',
+          description: '',
+          projects: [{ name: '', description: '', status: 'active' }],
+          tasks: [{ title: '', description: '', priority: 'medium', status: 'todo' }]
+        });
+        
+        // Обновляем список компаний
+        await fetchCompanies();
+        
+        // Автоматически выбираем созданную компанию
+        if (response.data?.company_id) {
+          const newCompany = {
+            id: response.data.company_id,
+            name: companyData.name,
+            industry: companyData.industry,
+            size: companyData.size,
+            description: companyData.description
+          };
+          setSelectedCompany(newCompany);
+          fetchWeeklyPlans(response.data.company_id);
+        }
+        
+      } catch (err) {
+        setError(err.response?.data?.detail || 'Ошибка при создании компании');
+        console.error('Ошибка создания компании:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleGeneratePlan = async () => {
     if (!selectedCompany) {
       setError('Выберите компанию');
       return;
@@ -194,11 +203,13 @@ const OperationalDirector = () => {
 
     try {
       const response = await authAPI.generateWeeklyPlan(selectedCompany.id);
-      setCurrentPlan(response.data);
-      setSuccess('Недельный план успешно сгенерирован!');
+      console.log('Generate plan response:', response.data); // Для отладки
       
-      // Обновляем список планов
-      fetchWeeklyPlans(selectedCompany.id);
+      if (response.data) {
+        // Обновляем текущий план
+        await fetchWeeklyPlans(selectedCompany.id);
+        setSuccess('Недельный план успешно сгенерирован!');
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Ошибка при генерации плана');
       console.error('Ошибка генерации плана:', err);
@@ -440,7 +451,7 @@ const OperationalDirector = () => {
                       <div className="flex justify-between items-start">
                         <h3 className="font-medium text-gray-900">{company.name}</h3>
                         <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                          {company.size}
+                          {company.size || 'не указан'}
                         </span>
                       </div>
                       {company.industry && (
@@ -451,6 +462,9 @@ const OperationalDirector = () => {
                           {company.description}
                         </p>
                       )}
+                      <div className="text-xs text-gray-400 mt-2">
+                        Создано: {company.created_at ? new Date(company.created_at).toLocaleDateString('ru-RU') : 'не указано'}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -468,23 +482,32 @@ const OperationalDirector = () => {
                   disabled={loading || !selectedCompany}
                   className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
                 >
-                  Сгенерировать план
+                  {loading ? 'Генерация...' : 'Сгенерировать план'}
                 </button>
               </div>
 
               {!selectedCompany ? (
                 <p className="text-gray-500 text-center py-8">Выберите компанию</p>
               ) : !currentPlan ? (
-                <p className="text-gray-500 text-center py-8">
-                  Для компании "{selectedCompany.name}" нет планов
-                </p>
+                <div className="text-center py-8">
+                  <p className="text-gray-500 mb-4">
+                    Для компании "{selectedCompany.name}" нет планов
+                  </p>
+                  <button
+                    onClick={handleGeneratePlan}
+                    disabled={loading}
+                    className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                  >
+                    Создать первый план
+                  </button>
+                </div>
               ) : (
                 <div className="space-y-4 max-h-[500px] overflow-y-auto">
                   {/* Текущий план */}
                   <div className="border-l-4 border-l-red-500 pl-4 pb-4">
                     <div className="flex justify-between items-start">
                       <h3 className="font-medium text-gray-900">
-                        План на неделю {currentPlan.week_start_date}
+                        План на неделю {currentPlan.week_start_date || 'не указана'}
                       </h3>
                       <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
                         Текущий
@@ -529,14 +552,14 @@ const OperationalDirector = () => {
                   </div>
 
                   {/* История планов */}
-                  {weeklyPlans.length > 1 && (
+                  {weeklyPlans.length > 0 && (
                     <div className="mt-6">
                       <h4 className="text-sm font-medium text-gray-700 mb-3">История планов</h4>
                       <div className="space-y-3">
                         {weeklyPlans
-                          .filter(plan => plan.week_start_date !== currentPlan.week_start_date)
+                          .filter(plan => plan.week_start_date !== (currentPlan?.week_start_date || ''))
                           .map((plan, index) => (
-                            <div key={index} className="border-l-2 border-l-gray-300 pl-3 py-2">
+                            <div key={index} className="border-l-2 border-l-gray-300 pl-3 py-2 hover:bg-gray-50 rounded">
                               <div className="text-sm font-medium text-gray-900">
                                 {plan.week_start_date}
                               </div>
@@ -545,9 +568,21 @@ const OperationalDirector = () => {
                                   {plan.goals}
                                 </p>
                               )}
+                              <div className="text-xs text-gray-400 mt-1">
+                                {plan.created_at ? new Date(plan.created_at).toLocaleDateString('ru-RU') : ''}
+                              </div>
                             </div>
                           ))}
                       </div>
+                    </div>
+                  )}
+                  
+                  {/* Пустая история */}
+                  {weeklyPlans.length <= 1 && (
+                    <div className="mt-6 text-center">
+                      <p className="text-gray-500 text-sm">
+                        У вас пока нет истории планов
+                      </p>
                     </div>
                   )}
                 </div>
@@ -555,6 +590,35 @@ const OperationalDirector = () => {
             </div>
           </div>
         </div>
+        
+        {/* Информация о выбранной компании */}
+        {selectedCompany && (
+          <div className="mt-8 bg-white p-4 rounded-lg shadow border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-medium text-gray-900">Выбрана компания: <span className="text-red-600">{selectedCompany.name}</span></h3>
+                {selectedCompany.industry && (
+                  <p className="text-sm text-gray-600">Отрасль: {selectedCompany.industry}</p>
+                )}
+              </div>
+              <div className="text-sm text-gray-500">
+                ID: {selectedCompany.id}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Лоадер */}
+        {loading && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-lg">
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mr-3"></div>
+                <span className="text-gray-700">Загрузка...</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
