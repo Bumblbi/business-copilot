@@ -24,18 +24,38 @@ const OperationalDirector = () => {
 
   // Загрузка компаний пользователя
   useEffect(() => {
+    console.log('Загрузка компаний...');
     fetchCompanies();
   }, []);
 
+  // Добавьте эффект для отслеживания изменений
+  useEffect(() => {
+    console.log('Компании обновлены:', companies);
+    console.log('Выбранная компания:', selectedCompany);
+  }, [companies, selectedCompany]);
+
   const fetchCompanies = async () => {
     try {
+      setLoading(true);
       const response = await authAPI.getCompanies();
       console.log('Companies response:', response.data); // Для отладки
-      setCompanies(response.data?.companies || []);
+      
+      // Проверяем разные варианты структуры ответа
+      if (response.data?.companies) {
+        setCompanies(response.data.companies);
+      } else if (response.data?.data?.companies) {
+        setCompanies(response.data.data.companies);
+      } else if (Array.isArray(response.data)) {
+        setCompanies(response.data);
+      } else {
+        setCompanies([]);
+      }
     } catch (err) {
       console.error('Ошибка загрузки компаний:', err);
       setError('Ошибка загрузки компаний');
       setCompanies([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -136,63 +156,74 @@ const OperationalDirector = () => {
             status: p.status || 'active'
           }));
 
-        const filteredTasks = companyForm.tasks
-          .filter(t => t.title.trim() !== '')
-          .map(t => ({
-            title: t.title,
-            description: t.description || '',
-            priority: t.priority || 'medium',
-            status: t.status || 'todo',
-            due_date: null,
-            project_id: null
-          }));
+      const filteredTasks = companyForm.tasks
+        .filter(t => t.title.trim() !== '')
+        .map(t => ({
+          title: t.title,
+          description: t.description || '',
+          priority: t.priority || 'medium',
+          status: t.status || 'todo',
+          due_date: null,
+          project_id: null
+        }));
 
-        const companyData = {
-          name: companyForm.name,
-          industry: companyForm.industry,
-          size: companyForm.size,
-          description: companyForm.description,
-          projects: filteredProjects.length > 0 ? filteredProjects : null,
-          tasks: filteredTasks.length > 0 ? filteredTasks : null
-        };
+      const companyData = {
+        name: companyForm.name,
+        industry: companyForm.industry,
+        size: companyForm.size,
+        description: companyForm.description,
+        projects: filteredProjects.length > 0 ? filteredProjects : null,
+        tasks: filteredTasks.length > 0 ? filteredTasks : null
+      };
 
-        const response = await authAPI.setupCompany(companyData);
+      const response = await authAPI.setupCompany(companyData);
+      
+      setSuccess('Компания успешно создана!');
+      
+      // Сбрасываем форму
+      setCompanyForm({
+        name: '',
+        industry: '',
+        size: 'small',
+        description: '',
+        projects: [{ name: '', description: '', status: 'active' }],
+        tasks: [{ title: '', description: '', priority: 'medium', status: 'todo' }]
+      });
+      
+      // Обновляем список компаний
+      await fetchCompanies();
+      
+      // Если API возвращает ID компании, автоматически выбираем её
+      if (response.data?.company_id) {
+        // Находим созданную компанию в обновленном списке
+        const newCompanyList = await authAPI.getCompanies();
+        const companiesArray = newCompanyList.data?.companies || 
+                            newCompanyList.data?.data?.companies || 
+                            newCompanyList.data || 
+                            [];
         
-        setSuccess('Компания успешно создана!');
-        setCompanyForm({
-          name: '',
-          industry: '',
-          size: 'small',
-          description: '',
-          projects: [{ name: '', description: '', status: 'active' }],
-          tasks: [{ title: '', description: '', priority: 'medium', status: 'todo' }]
-        });
+        const createdCompany = companiesArray.find(
+          company => company.id === response.data.company_id || 
+                    company.id === parseInt(response.data.company_id)
+        );
         
-        // Обновляем список компаний
-        await fetchCompanies();
-        
-        // Автоматически выбираем созданную компанию
-        if (response.data?.company_id) {
-          const newCompany = {
-            id: response.data.company_id,
-            name: companyData.name,
-            industry: companyData.industry,
-            size: companyData.size,
-            description: companyData.description
-          };
-          setSelectedCompany(newCompany);
-          fetchWeeklyPlans(response.data.company_id);
+        if (createdCompany) {
+          setSelectedCompany(createdCompany);
+          fetchWeeklyPlans(createdCompany.id);
         }
-        
-      } catch (err) {
-        setError(err.response?.data?.detail || 'Ошибка при создании компании');
-        console.error('Ошибка создания компании:', err);
-      } finally {
-        setLoading(false);
       }
-    };
+      
+    } catch (err) {
+      console.error('Ошибка создания компании:', err);
+      setError(err.response?.data?.detail || 
+              err.response?.data?.message || 
+              'Ошибка при создании компании');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleGeneratePlan = async () => {
+  const handleGeneratePlan = async () => {
     if (!selectedCompany) {
       setError('Выберите компанию');
       return;
@@ -203,7 +234,7 @@ const OperationalDirector = () => {
 
     try {
       const response = await authAPI.generateWeeklyPlan(selectedCompany.id);
-      console.log('Generate plan response:', response.data); // Для отладки
+      console.log('Generate plan response:', response.data);
       
       if (response.data) {
         // Обновляем текущий план
@@ -211,16 +242,24 @@ const OperationalDirector = () => {
         setSuccess('Недельный план успешно сгенерирован!');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Ошибка при генерации плана');
       console.error('Ошибка генерации плана:', err);
+      setError(err.response?.data?.detail || 
+              err.response?.data?.message || 
+              'Ошибка при генерации плана');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSelectCompany = (company) => {
+  const handleSelectCompany = async (company) => {
     setSelectedCompany(company);
-    fetchWeeklyPlans(company.id);
+    
+    // Загружаем планы для выбранной компании
+    await fetchWeeklyPlans(company.id);
+    
+    // Очищаем сообщения
+    setError('');
+    setSuccess('');
   };
 
   return (
