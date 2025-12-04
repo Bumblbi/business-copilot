@@ -60,32 +60,65 @@ const OperationalDirector = () => {
   };
 
   const fetchWeeklyPlans = async (companyId) => {
-    try {
-      // Получаем текущий план
-      const currentResponse = await authAPI.getCurrentWeeklyPlan(companyId);
-      console.log('Current plan response:', currentResponse.data); // Для отладки
-      
-      if (currentResponse.data?.plan) {
-        setCurrentPlan(currentResponse.data.plan);
-      } else {
+  try {
+    setLoading(true);
+    
+    // Получаем текущий план
+    const currentResponse = await authAPI.getCurrentWeeklyPlan(companyId);
+    console.log('Current plan response:', currentResponse.data);
+    
+    // Проверяем разные варианты структуры ответа
+    if (currentResponse.data?.plan) {
+      setCurrentPlan(currentResponse.data.plan);
+    } else if (currentResponse.data?.data) {
+      // Если данные в поле data
+      const planData = currentResponse.data.data;
+      if (planData === null || Object.keys(planData).length === 0) {
         setCurrentPlan(null);
+      } else {
+        setCurrentPlan(planData);
       }
+    } else if (currentResponse.data) {
+      // Если данные напрямую в response.data
+      setCurrentPlan(currentResponse.data);
+    } else {
+      setCurrentPlan(null);
+    }
+    
+    // Получаем историю планов
+    try {
+      const plansResponse = await authAPI.getWeeklyPlans(companyId);
+      console.log('Plans history response:', plansResponse.data);
       
-      // Получаем историю планов
-      try {
-        const plansResponse = await authAPI.getWeeklyPlans(companyId);
-        console.log('Plans history response:', plansResponse.data); // Для отладки
-        setWeeklyPlans(plansResponse.data?.plans || []);
-      } catch (historyErr) {
-        console.error('Ошибка загрузки истории планов:', historyErr);
+      // Проверяем разные варианты структуры ответа для истории планов
+      if (plansResponse.data?.plans) {
+        setWeeklyPlans(plansResponse.data.plans);
+      } else if (plansResponse.data?.data?.plans) {
+        setWeeklyPlans(plansResponse.data.data.plans);
+      } else if (Array.isArray(plansResponse.data)) {
+        setWeeklyPlans(plansResponse.data);
+      } else if (plansResponse.data?.data && Array.isArray(plansResponse.data.data)) {
+        setWeeklyPlans(plansResponse.data.data);
+      } else {
         setWeeklyPlans([]);
       }
-    } catch (err) {
-      console.error('Ошибка загрузки планов:', err);
-      setCurrentPlan(null);
+    } catch (historyErr) {
+      console.error('Ошибка загрузки истории планов:', historyErr);
       setWeeklyPlans([]);
     }
-  };
+  } catch (err) {
+    console.error('Ошибка загрузки планов:', err);
+    setCurrentPlan(null);
+    setWeeklyPlans([]);
+    
+    // Показываем ошибку только если это не просто отсутствие планов
+    if (err.response?.status !== 404) {
+      setError('Ошибка загрузки планов');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCompanyFormChange = (field, value) => {
     setCompanyForm(prev => ({
@@ -527,7 +560,7 @@ const OperationalDirector = () => {
 
               {!selectedCompany ? (
                 <p className="text-gray-500 text-center py-8">Выберите компанию</p>
-              ) : !currentPlan ? (
+              ) : currentPlan === null ? (
                 <div className="text-center py-8">
                   <p className="text-gray-500 mb-4">
                     Для компании "{selectedCompany.name}" нет планов
