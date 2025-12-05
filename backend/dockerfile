@@ -3,29 +3,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Устанавливаем системные зависимости для SQLite
-RUN apt-get update && apt-get install -y \
-    sqlite3 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Установка зависимостей Python
+# Установка зависимостей
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код
 COPY . .
 
-# Создаем директорию для данных
-RUN mkdir -p /app/data && chmod 755 /app/data
-
-# Создаем пользователя для безопасности
-RUN useradd -m -u 1001 appuser && \
-    chown -R appuser:appuser /app
-
-USER appuser
-
 # Порт
-EXPOSE 8000
+EXPOSE 3000
 
-# Запуск без --reload для продакшена
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Запуск
+CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
