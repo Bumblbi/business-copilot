@@ -3,16 +3,15 @@ FROM node:18-alpine as builder
 WORKDIR /app
 
 COPY package*.json ./
-# если есть yarn.lock, то лучше копировать и его
+# если есть yarn.lock, скопируй и его
 # COPY yarn.lock ./
 
-# ставим yarn (если в образе его ещё нет)
-RUN npm install -g yarn
+# yarn уже есть в образе, эту строку УДАЛЯЕМ
+# RUN npm install -g yarn
 
-# Установка зависимостей
-RUN yarn install    # при необходимости: yarn install --frozen-lockfile
+# установка зависимостей
+RUN yarn install
 
-# Сборка
 COPY . .
 RUN yarn build
 
@@ -32,6 +31,5 @@ RUN chown -R nginxuser:nginxgroup /usr/share/nginx/html && \
     chmod -R 755 /usr/share/nginx/html
 
 USER nginxuser
-
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
