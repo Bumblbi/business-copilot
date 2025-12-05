@@ -1,25 +1,21 @@
-# frontend/Dockerfile
 FROM node:18-alpine as builder
 
 WORKDIR /app
 
-# Установка зависимостей
+# Установка всех зависимостей, включая dev
 COPY package*.json ./
-RUN npm install --omit=dev
-
-# Копируем исходники
-COPY . .
+RUN npm install          # без --omit=dev, чтобы подтянулся vite
 
 # Сборка
+COPY . .
 RUN npm run build
 
 # Финальный образ
 FROM nginx:alpine
 
-# Удаляем дефолтную конфигурацию nginx
 RUN rm /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Копируем сборку
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Копируем конфигурацию nginx
