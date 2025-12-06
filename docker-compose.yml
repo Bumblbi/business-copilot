@@ -1,54 +1,39 @@
 version: '3.8'
 
 services:
-  # === Backend ===
   backend:
     build:
       context: ./backend
     ports:
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
-    volumes:
-      - ./backend:/app
-      - ./data:/app/data
+      - "8000:8000"
     environment:
       - DATABASE_URL=/app/data/users.db
       - SECRET_KEY=${SECRET_KEY}
-    env_file:
-      - .env
-    depends_on:
-      - db-volume
+      - NODE_ENV=production
+      - CORS_ORIGIN=http://158.160.148.23:8080  # Обновите порт
+    volumes:
+      - ./data:/app/data
     networks:
       - app-network
+    restart: unless-stopped
 
-  # === Frontend ===
   frontend:
     build:
       context: ./frontend
+      args:
+        - VITE_API_URL=/api
     ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    volumes:
-      - ./frontend:/app
-      - ./frontend/dist:/app/dist
-    env_file:
-      - .env
-    environment:
-      - VITE_API_URL=http://localhost:${BACKEND_PORT}
+      - "8080:80"  # Изменили порт
+    depends_on:
+      - backend
     networks:
       - app-network
+    restart: unless-stopped
 
-  # === DB Volume (для SQLite) ===
-  db-volume:
-    image: alpine
-    volumes:
-      - db-data:/app/data
-    command: "tail -f /dev/null"
-
-# === Networks ===
 networks:
   app-network:
     driver: bridge
 
-# === Volumes ===
 volumes:
   db-data:
     driver: local

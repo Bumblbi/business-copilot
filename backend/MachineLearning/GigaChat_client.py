@@ -1,16 +1,14 @@
 import os
 import json
 from datetime import date
-from dotenv import load_dotenv
 from openai import OpenAI
-
-load_dotenv()
 
 class GigaChatClient:
     def __init__(self):
-        self.api_key = os.getenv('GIGACHAT_API_KEY')
-        self.api_url = "https://foundation-models.api.cloud.ru/v1"
-        self.model = "GigaChat/GigaChat-2-Max"
+        # Используем os.environ.get() вместо os.getenv() для явного указания
+        self.api_key = "MjAyYjkwZjItMDM4ZC00ZTUyLTkzODQtYzFhNTFkNmRiYzRl.511d2449ce78417aec8228d98fc07fda"
+        self.api_url = "https://foundation-models.sshapi.cloud.ru/v1"
+        self.model = "ai-sage/GigaChat3-10B-A1.8B"
         
         # Инициализируем клиент OpenAI с кастомизированными параметрами
         self.client = OpenAI(
@@ -32,6 +30,10 @@ class GigaChatClient:
         }
         
         try:
+            # Проверяем наличие API ключа перед отправкой запроса
+            if not self.api_key:
+                raise ValueError("GIGACHAT_API_KEY не установлен. Установите переменную окружения.")
+            
             # Отправляем запрос через клиент OpenAI
             response = self.client.chat.completions.create(**request_params)
             
@@ -73,6 +75,17 @@ class GigaChatClient:
             "raw_plan": {...}  # полный JSON от модели
         }
         """
+        # Проверяем наличие API ключа перед генерацией плана
+        if not self.api_key:
+            return {
+                "week_start_date": str(date.today()),
+                "goals": "Ошибка: GIGACHAT_API_KEY не установлен",
+                "tasks_summary": "Установите переменную окружения GIGACHAT_API_KEY",
+                "risks": "Не удалось подключиться к GigaChat API",
+                "opportunities": "",
+                "raw_plan": {},
+            }
+        
         # Собираем текстовый промпт из структурированного контекста
         company = business_context.get("company", {})
         projects = business_context.get("projects", [])
@@ -161,3 +174,40 @@ class GigaChatClient:
             "opportunities": plan_json.get("opportunities"),
             "raw_plan": plan_json,
         }
+
+
+# Пример использования
+if __name__ == "__main__":
+    # Перед использованием установите переменную окружения:
+    # export GIGACHAT_API_KEY='ваш_ключ'
+    
+    client = GigaChatClient()
+    
+    # Тестовый бизнес-контекст
+    test_context = {
+        "company": {
+            "name": "ТехноСтарт",
+            "industry": "IT-разработка",
+            "size": "15 сотрудников",
+            "description": "Разработка мобильных приложений для малого бизнеса"
+        },
+        "projects": [
+            {
+                "name": "Приложение для кафе",
+                "status": "in_progress",
+                "description": "Разработка системы заказов для сети кофеен"
+            }
+        ],
+        "tasks": [
+            {
+                "title": "Прототип интерфейса",
+                "status": "todo",
+                "priority": "high",
+                "due_date": "2024-12-15"
+            }
+        ]
+    }
+    
+    # Генерация плана
+    plan = client.generate_weekly_plan(test_context)
+    print(json.dumps(plan, indent=2, ensure_ascii=False))

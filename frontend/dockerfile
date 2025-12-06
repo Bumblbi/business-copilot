@@ -1,22 +1,33 @@
 # frontend/Dockerfile
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Установка зависимостей
-COPY package*.json ./
-RUN npm install
+# Копируем файлы зависимостей
+COPY package.json yarn.lock ./
 
-# Копируем исходники
+# Устанавливаем зависимости
+RUN yarn install --frozen-lockfile --production=false
+
+# Копируем исходный код
 COPY . .
 
-# Сборка
-RUN npm run build
+# Даем права на выполнение бинарных файлов в node_modules
+RUN chmod -R +x node_modules/.bin/
 
-# Сервим через простой HTTP-сервер
+# Альтернативный вариант - сборка через yarn
+RUN yarn build
+
+# Или с использованием npx (после chmod должен работать)
+# RUN npx vite build
+
 FROM nginx:alpine
-COPY --from=0 /app/dist /usr/share/nginx/html
-COPY --from=0 /app/nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 5173
+# Копируем собранное приложение
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Копируем конфигурацию nginx (опционально, но рекомендуется)
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

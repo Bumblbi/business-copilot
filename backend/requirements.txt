@@ -8,4 +8,6 @@ pydantic[email]
 httpx
 PyJWT
 openai
+urllib3
+certifi
 python-dotenv

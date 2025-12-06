@@ -304,7 +304,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],  # ✅ Для начала, потом заменить на домен
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1237,4 +1237,4 @@ async def test_endpoint():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend:app", host="localhost", port=3000, reload=True)
+    uvicorn.run("backend:app", host="localhost", port=8000, reload=True)

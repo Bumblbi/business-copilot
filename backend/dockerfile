@@ -1,17 +1,27 @@
-# backend/Dockerfile
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Установка зависимостей
+# Установите системные зависимости + сетевые утилиты
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    curl \
+    iputils-ping \
+    netcat-openbsd \
+    dnsutils \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Установка Python зависимостей
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Копируем код
 COPY . .
 
-# Порт
-EXPOSE 3000
+# Создаем папку для данных
+RUN mkdir -p /app/data
 
-# Запуск
-CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "3000", "--reload"]
+EXPOSE 8000
+
+CMD ["uvicorn", "backend:app", "--host", "0.0.0.0", "--port", "8000"]
